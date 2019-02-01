@@ -22,7 +22,7 @@ Select    Oppt.Id
 --	, AE_Lvl2.Name 'AE_Level2'	
 --	, AE_Lvl1.Name 'AE_Level1'
 	, AE.Name Acct_Exec
-	, AE.Territory_ID__c AE_Territory_Id
+	, AE.Territory_ID__c Territory_ID
 --	, AE.ForecastEnabled AE_ForecastEnabled
 	, AE.IsActive AE_IsActive
 --	, Oppt.SE_Opportunity_Owner__c SE_Id
@@ -35,8 +35,6 @@ Select    Oppt.Id
 	, SE.Division SE_Division
 	, SE.Sub_Division__c SE_Sub_Division
 	, SE.Email
---	, SE.Territory_ID__c SE_Territory_Id
---	, SE.ForecastEnabled SE_ForecastEnabled
 	, SE.IsActive SE_IsActive
 	, SE_Role.Name 'SE_Role'
 --	, Oppt.Channel_Led_Deal__c
@@ -64,7 +62,7 @@ left join [PureDW_SFDC_staging].[dbo].[User] SE_Level3 on SE_Level2.ManagerId = 
 left join [PureDW_SFDC_staging].[dbo].[Contact] Partner_AE on Oppt.Partner_AE__c = Partner_AE.Id
 left join [PureDW_SFDC_staging].[dbo].[Contact] Partner_SE on Oppt.Partner_SE__c = Partner_SE.Id
 where Oppt.CloseDate >= '2018-02-01'
-and Oppt.Theater__c = 'America''s'
+--and Oppt.Theater__c = 'America''s'
 and RecType.Name in ('Sales Opportunity', 'ES2 Opportunity') --, 'CSAT Opportunity', 'Renewal', 'Internal System Request Opportunity')
 Order by Oppt.Theater__c, Oppt.Division__c, Oppt.Sub_Division__c
 
