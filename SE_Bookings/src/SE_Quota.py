@@ -19,33 +19,6 @@ Date_Period = get_Period_map(0)
 from getData import get_TerritoryID_Master
 TerritoryID_Master = get_TerritoryID_Master(1)
 
-# Clean the Hierarchy & Theater values for report
-TerritoryID_Master.loc[(TerritoryID_Master.Hierarchy == 'Account Quotas') & (TerritoryID_Master.Theater == 'GIobals Account Quotas'), 'Super-Region'] = 'Globals Account program activity'
-TerritoryID_Master.loc[(TerritoryID_Master.Hierarchy == 'Account Quotas') & (TerritoryID_Master.Theater == 'GIobals Account Quotas'), 'Theater'] = 'Globals Account Quotas'
-
-TerritoryID_Master.loc[(TerritoryID_Master.Hierarchy == 'Account Quotas') & (TerritoryID_Master.Theater == 'Enterprise account activity, Globally'), 'Theater'] = 'Enterprise account'
-TerritoryID_Master.loc[(TerritoryID_Master.Hierarchy == 'Account Quotas') & (TerritoryID_Master.Theater == 'Global Systems Integrator (GSI) program SELL TO and SELL-THROUGH/WITH activity, Globally (Accenture & ATOS & CapGemini & CGI & Cognizant-Trizetto & Deloitte & DXC & Fujitsu & HCL & IBM Global Services & Infosys & PricewaterhouseCoopers & Sopra & TCS & Tech Mahindra & Tsystems & Wipro)'), 'Theater'] \
-                                                                                                            = 'Global Systems Integrator'
-TerritoryID_Master.loc[(TerritoryID_Master.Hierarchy == 'Account Quotas') & (TerritoryID_Master.Theater == 'G2K Target Account activity, Globally (Alphabet Inc. & American International Group & Apple Inc. & ATOS IDM & Automatic Data Processing Inc. & Aviva PLC & Bank of America Corporation & BT Group PLC & Cisco Systems Inc. & Credit Agricole SA & CVS Health Corporation & Deutsche Telecom AG & Fidelity National Information Services, Inc. & Fiserv, Inc. & FMR LLC & Ford Motor Company & General Motors Company & Honeywell International Inc. & Intel Corporation & Johnson & Johnson & MetLife Inc. & Nationwide Mutual Insurance Company & PayPal Holdings Inc. & PepsiCo, Inc. & The PNC Financial Services Group Inc & Prudential Financial, Inc. & Royal Bank of Canada & Salesforce.com, Inc. & Siemens AG & StateFarm Insurance & Target Corporation & Toyota Motor Corporation & UnitedHealth Group & United Parcel Service Inc. & U.S. Bancorp & Visa Inc. & Volkswagen Aktiengesellschaft & Wal-Mart Stores, Inc. & Wells Fargo & Company & Zurich Insurance Group)'), \
-                                                                                                            'Theater'] \
-                                                                                                            = 'G2K Target Accounts'
-TerritoryID_Master.loc[(TerritoryID_Master.Hierarchy == 'Verticals') & (TerritoryID_Master.Theater == 'Healthcare Vertical (Providers, Life Sciences & Healthcare Technology) activity, Globally'), 'Theater'] \
-                                                                                                            = 'Healthcare Vertical'
-TerritoryID_Master.loc[(TerritoryID_Master.Theater == 'National Partner program activity in AMER (CDW & Dimension Data & ePlus & Forsythe & Insight Investments & Presidio & SHI & Sirius Solutions & Worldwide Technology) and in EMEA ('),\
-                                                                                                            'Hierarchy'] \
-                                                                                                            = 'National Partner'
-TerritoryID_Master.loc[(TerritoryID_Master.Theater == 'National Partner program activity in AMER (CDW & Dimension Data & ePlus & Forsythe & Insight Investments & Presidio & SHI & Sirius Solutions & Worldwide Technology) and in EMEA ('),\
-                                                                                                            'Theater'] \
-                                                                                                            = 'National Partner'
-
-TerritoryID_Master.loc[(TerritoryID_Master.Hierarchy == 'Pro Services') & (TerritoryID_Master.Level != 'Hierarchy'), 'Theater'] \
-            = TerritoryID_Master.loc[(TerritoryID_Master.Hierarchy == 'Pro Services') & (TerritoryID_Master.Level != 'Hierarchy')].Theater.apply(lambda x : x.replace(' Super-Region',''))
-
-TerritoryID_Master[TerritoryID_Master.Territory_ID=='WW_EMA_EEM_EMS_ZAR_002']['Territory_Description'].str.replace('\\n', " ")                                                                                                            
-#TerritoryID_Master.loc[(TerritoryID_Master.Hierarchy == 'Pro Services') & (TerritoryID_Master.Level != 'Hierarchy'), 'Theater'] \
-#            = TerritoryID_Master.loc[(TerritoryID_Master.Hierarchy == 'Pro Services') & (TerritoryID_Master.Level != 'Hierarchy')].Theater.str.extract('^(.*?)\ Super-Region')                                                                                             
-#TerritoryID_Master[TerritoryID_Master.Theater.str.match('National Partner*', na=False)]
-
 #===============================================================================
 # Reading SE Territory and Quota from the Individual Quota Master spreadsheet
 # SE has a $ quota per month, quarter each year (regardless number of territory he/she cover
@@ -58,14 +31,30 @@ TerritoryID_Master[TerritoryID_Master.Territory_ID=='WW_EMA_EEM_EMS_ZAR_002']['T
 from getData import get_anaplan_quota
 quota_master = get_anaplan_quota(1)
 
+#------------------------------------------------------------------------------ 
+# Since the SE Mgr covers the entire Region, AnaPlan assign the SE Mgr to a Region.
+# The quota amount is less than assigning the Mgr to all Districts in a Region
+# For report, need to breakout into region id into district ids
+# John Bradley : replace 'WW_GLB_MSP_MSP' with 'WW_GLB_MSP_MSP_MSP; WW_GLB_MSP_MSP_TEL'
+# SR-10115_SE Mgmt_Canada SEM : replace 'WW_AMS_COM_CAD' with 'WW_AMS_COM_CAD_CAD; WW_AMS_COM_CAD_TOR'
+#------------------------------------------------------------------------------ 
+
+a = quota_master[quota_master.Name == 'SR-10115_SE Mgmt_Canada SEM']['Territory_IDs']
+b = a.str.replace("WW_AMS_COM_CAD", "WW_AMS_COM_CAD_CAD; WW_AMS_COM_CAD_TOR")
+quota_master.loc[quota_master.Name == 'SR-10115_SE Mgmt_Canada SEM','Territory_IDs'] = b
+
+a = quota_master[quota_master.Name == 'John Bradley']['Territory_IDs']
+b = a.str.replace('WW_GLB_MSP_MSP', 'WW_GLB_MSP_MSP_MSP; WW_GLB_MSP_MSP_TEL')
+quota_master.loc[quota_master.Name == 'John Bradley','Territory_IDs'] = b
 
 # fill the Blank Coverage Assignment ID to 'No Plan / No Coverage'
 
-#-----------------Create report using Anaplan coverage inforamtion----------------------------------------------------
+#-----------------Create report to show the SE assignment , SE to AE mapping, using Anaplan coverage information--------
 # Read the Territory assignment, Create a Long view for Tableau report
-Territory_assignment_W = quota_master[['Name', 'Title','Resource_Group','HC_Status', 'Manager','Territory_IDs']]
+Territory_assignment_W = quota_master[['Name', 'Title','Resource_Group','HC_Status', 'Email','Manager','Territory_IDs']]
 Territory_assignment_W.Territory_IDs.fillna("",inplace=True)
 len_header = len(Territory_assignment_W.columns)
+
 
 # Split the multiple territory coverage into columns
 temp = Territory_assignment_W['Territory_IDs'].str.split(';', expand=True)
@@ -77,7 +66,7 @@ for i in Coverage_Col:
     ## add the code to clean up the territory id to only include the XXX_XXX_XXX part
 
 # Un-pivot the Territory IDs
-Territory_assignment_L = pd.melt(Territory_assignment_W, id_vars=['Name','Title','Resource_Group', 'HC_Status', 'Manager','Territory_IDs'], value_vars = Coverage_Col,
+Territory_assignment_L = pd.melt(Territory_assignment_W, id_vars=['Name','Title','Resource_Group', 'HC_Status', 'Email', 'Manager','Territory_IDs'], value_vars = Coverage_Col,
                 var_name = 'Coverage_Area_', value_name = 'Territory_ID')
 Territory_assignment_L = Territory_assignment_L[~(Territory_assignment_L.Territory_ID.isnull())] #clean the null data
 
@@ -87,7 +76,82 @@ Territory_assignment_L.sort_values(by=['Territory_ID','Name'], inplace=True)
 # Write the Territory Assignment to a text file
 Territory_assignment_L.to_csv(cfg.output_folder+'Territory_Assignment_Anaplan.txt', sep="|", index=False)
 
+                        
+#------ Create a report on SE assignment w.r.t SFDC sub-division --------------------------------------
+# Typically,
+# SE AVP is assigned to a Theater, SE Director is assigned to Region, and SEM is assigned to District
+# SFDC Sub-Division is mapped with District (~ roughly)
+# SEM SFDC Sub-Division is the District coverage
+# SE Director sub-division includes the District Territory IDs begin with the Region Territory ID
+# SE AVP sub-division includes the District Territory IDs begin with the assigned Theater Territory ID
+#
+# But the America has Direct Sales and ISO in the same district and different sub-division
+# I have to loop through to find the direct report to determine the sub division(s) which a Manager has access
+# SE covers 1 or multiple Territory IDs, thus I have loop using the L view
+#------------------------------------------------------------------------------------------------------- 
 
+# create an new dataframe to host the information
+# it has the Name, email, Sub-Division
+mgr_level = ['SEM']  # how to do SE specialist? they are assigned at different levels, #'SE Director','SE AVP'
+SE_org_coverage = pd.DataFrame(columns = ['Name','Email','Resource_Group','Sub_Division','Manager'])
+
+
+for i in mgr_level:
+    # find the SEM's names
+    mgr_names = Territory_assignment_L[(Territory_assignment_L.Theater=='Americas Theater') & 
+                       (Territory_assignment_L.Resource_Group==i) & 
+                       ~(Territory_assignment_L.Name.str.match('SR-*')) & 
+                       ~(Territory_assignment_L.Name.str.match('^\d'))]['Name']
+    mgr_names = list(dict.fromkeys(mgr_names)) # create a dictionary from the list items as keys, then pull the keys from the dictionary
+    
+    # find the sub-divisions reporting to the SEMs                 
+    for j in mgr_names:        
+        Sub_Division_List = pd.DataFrame(list(dict.fromkeys(Territory_assignment_L[Territory_assignment_L.Manager == j]['Sub_Division'])), columns=['Sub_Division'])
+        if len(Sub_Division_List) == 0:  # new manager with no reporting
+            Sub_Division_List = Territory_assignment_L[(Territory_assignment_L.Territory_ID.str.contains(Territory_assignment_L[Territory_assignment_L.Name == j]['Territory_ID'].values[0])) &
+                                                       ~(Territory_assignment_L.Sub_Division.isnull())]['Sub_Division'][:1]
+            
+        temp = pd.concat([Territory_assignment_W.loc[Territory_assignment_W.Name==j,['Name','Email','Resource_Group','Manager']]]*(len(Sub_Division_List)), ignore_index=True)
+        temp = pd.concat([temp, Sub_Division_List], axis=1)      
+        SE_org_coverage = SE_org_coverage.append(temp, sort=False)
+
+
+# remove the blank Sub_Division
+SE_org_coverage = SE_org_coverage[~SE_org_coverage.Sub_Division.isnull()]
+SE_org_coverage = pd.merge(SE_org_coverage,
+                           TerritoryID_Master[(TerritoryID_Master.Theater=='Americas Theater') & ~(TerritoryID_Master.Sub_Division.isnull())][['Sub_Division','Theater','Region','District']],
+                           how='left', left_on='Sub_Division', right_on='Sub_Division')
+# for SEM whoes assignment is not at the district level, the Sub_Divsion cannot join
+#------------------------------------------------------------------------------ 
+# construct the sub-division list for SE Director and SE AVP
+mgr_level = ['SEM','SE Director']
+
+for i in mgr_level:
+    # find the Manager's of the SEM and SE Director
+    mgr_names = SE_org_coverage[(SE_org_coverage.Theater=='Americas Theater') & 
+                                (SE_org_coverage.Resource_Group==i) &
+                                (SE_org_coverage.Name.str.match('^[^SR-]*')) &
+                                (SE_org_coverage.Name.str.match('^[^\d]*'))
+                                ]['Manager']
+    mgr_names = list(dict.fromkeys(mgr_names)) # create a dictionary from the list items as keys, then pull the keys from the dictionary
+    
+    # find the sub-divisions of the SEM reporting to the SE Director                 
+    for j in mgr_names:        
+        Sub_Division_List = pd.DataFrame(list(dict.fromkeys(SE_org_coverage[SE_org_coverage.Manager == j]['Sub_Division'])), columns=['Sub_Division'])
+        if len(Sub_Division_List) == 0:
+            print('bad') # need to add the code when the new manager has no reporting #I am too tired Mar 1, 2019
+            
+        temp = pd.concat([Territory_assignment_W.loc[Territory_assignment_W.Name==j,['Name','Email','Resource_Group','Manager']]]*(len(Sub_Division_List)), ignore_index=True)
+        temp = pd.concat([temp, Sub_Division_List], axis=1)
+        temp = pd.merge(temp,TerritoryID_Master[(TerritoryID_Master.Theater=='Americas Theater') & ~(TerritoryID_Master.Sub_Division.isnull())][['Sub_Division','Theater','Region','District']],
+                           how='left', left_on='Sub_Division', right_on='Sub_Division')
+        SE_org_coverage = SE_org_coverage.append(temp, sort=False)
+
+
+SE_org_coverage = SE_org_coverage[~(SE_org_coverage.Name.isnull())]
+SE_org_coverage.to_csv(cfg.output_folder+'SE_Hierarchy_2020.txt', sep="|", index=False)
+
+'''
 #-----------------Code using Override Territory IDs if needed -------------------------------------------------------------
 #Populate the Anaplan Id to override column
 quota_master.loc[(quota_master.Override_Territory_IDs.isna()),'Override_Territory_IDs'] = quota_master.Territory_IDs
@@ -115,7 +179,7 @@ Territory_assignment_L.sort_values(by=['Territory_ID','Name'], inplace=True)
 
 # Write the Territory Assignment to a text file
 Territory_assignment_L.to_csv(cfg.output_folder+'Territory_Assignment_w_Override.txt', sep="|", index=False)
-
+'''
 
 #------------------------------------------------------------------------------ 
 # Read the individual quota information
