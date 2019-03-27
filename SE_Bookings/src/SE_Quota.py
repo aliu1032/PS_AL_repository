@@ -3,15 +3,15 @@ Created on Jan 11, 2019
 
 @author: aliu
 '''
+#===============================================================================
+# From Anaplan files,
+# Read the Territory Master
+# Coverage assignment
+# Quota amount assignment
+#===============================================================================
 
 import project_config as cfg
 import pandas as pd
-
-#===============================================================================
-# Read the Date to PS Quarter mapping
-#===============================================================================
-from getData import get_Period_map
-Date_Period = get_Period_map(0)
 
 #===============================================================================
 # Read the Territory ID master
@@ -31,171 +31,166 @@ TerritoryID_Master = get_TerritoryID_Master(1)
 from getData import get_anaplan_quota
 quota_master = get_anaplan_quota(1)
 
+## Joe Mercede
+## Eugenue McCarth
+## Coverage assignment vs Comm Plan Assignment 
+#------------------------------------------------------------------------------ 
+# Create report to show the Quota assignment , SE to AE mapping, using Anaplan coverage information
+# The report helps user to verify the SE org compensation plan assignment
+# Anaplan manages & maintains the Sales resources, account assignment
+# Output: Territory_Assignment_W 
+#         Territory_Assignment_L
+#         SE_Hierarchy_2020 , this one provide the SFDC Sub-Division visibility information
+#------------------------------------------------------------------------------ 
+
+# Read the Quota assignment from Anaplan 
+# Quota_assignement_W is by Name
+Quota_assignment_W = quota_master[['Name', 'Title','Resource_Group','HC_Status', 'SFDC_UserID', 'Email','Manager','Territory_IDs']]
+Quota_assignment_W.Territory_IDs.fillna("",inplace=True)
+len_header = len(Quota_assignment_W.columns)
+
+# for user who carry quota for multiple territories, Split the multiple territory coverage into columns
+temp = Quota_assignment_W['Territory_IDs'].str.split(';', expand=True)
+Quota_assignment_W = pd.merge(Quota_assignment_W, temp, how='left', left_index=True, right_index=True)
+
+Quota_assignment_col = Quota_assignment_W.columns[len_header:]
+for i in Quota_assignment_col:
+    Quota_assignment_W[i] = Quota_assignment_W[i].str.strip()
+
+# Un-pivot the Territory IDs
+Quota_assignment_L = pd.melt(Quota_assignment_W, id_vars=['Name','Title','Resource_Group', 'HC_Status', 'SFDC_UserID', 'Email', 'Manager','Territory_IDs'], value_vars = Quota_assignment_col,
+                var_name = 'Quota_assignment', value_name = 'Territory_ID')
+Quota_assignment_L = Quota_assignment_L[~(Quota_assignment_L.Territory_ID.isnull())] #clean the null data
+
+Quota_assignment_L = pd.merge(Quota_assignment_L, TerritoryID_Master, how='left', left_on='Territory_ID', right_on='Territory_ID')
+Quota_assignment_L.sort_values(by=['Territory_ID','Name'], inplace=True)
+
+# Write the Quota Assignment to a text file
+Quota_assignment_L.to_csv(cfg.output_folder+'Quota_Assignment_Anaplan.txt', sep="|", index=False)
+
+
+## Joe Mercede
+## Eugenue McCarth
+## Coverage assignment vs Comm Plan Assignment 
+#------------------------------------------------------------------------------ 
+# Theoretically,
+# A SE is assigned to territories; a SEM is assigned to districts
+# in some cases, SE is assigned to a district/region quota; SEM is assigned to region quota
+# For the SE & SEM who are assigned to the 'level' above, create a report to resolve quota assignment to coverage assignment
+# Some reasons are:
+# A user is ramping up / down, the partnered AE is ramping up/down, then the SE is assigned to the district quota and not a territory quota
+# A user is part of a pool for a district/region, then the SE is assigned to the district/region
+# The quota amount is less than assigning the Mgr to all Districts in a Region, then the SEM is assigned to Region and not multiple districts
+#------------------------------------------------------------------------------ 
 #------------------------------------------------------------------------------ 
 # Since the SE Mgr covers the entire Region, AnaPlan assign the SE Mgr to a Region.
-# The quota amount is less than assigning the Mgr to all Districts in a Region
+# 
 # For report, need to breakout into region id into district ids
 # John Bradley : replace 'WW_GLB_MSP_MSP' with 'WW_GLB_MSP_MSP_MSP; WW_GLB_MSP_MSP_TEL'
 # SR-10115_SE Mgmt_Canada SEM : replace 'WW_AMS_COM_CAD' with 'WW_AMS_COM_CAD_CAD; WW_AMS_COM_CAD_TOR'
 #------------------------------------------------------------------------------ 
 
-a = quota_master[quota_master.Name == 'SR-10115_SE Mgmt_Canada SEM']['Territory_IDs']
-b = a.str.replace("WW_AMS_COM_CAD", "WW_AMS_COM_CAD_CAD; WW_AMS_COM_CAD_TOR")
-quota_master.loc[quota_master.Name == 'SR-10115_SE Mgmt_Canada SEM','Territory_IDs'] = b
+def expand_territory(input_series, expand_to_level):
+    # input: a row in the source database, when passed in it is a series
+    #print (type(input_series))
+    #print (expand_to_level)
+    header_col = ['Name', 'Title', 'Resource_Group', 'HC_Status', 'SFDC_UserID', 'Email', 'Manager', 'Territory_IDs', 'Quota_assignment']
+    source_territory = input_series['Territory_ID']
+    #print(source_territory)
+    #print((input_series[header_col]))
+    row_count = len(TerritoryID_Master[(TerritoryID_Master.Level == expand_to_level) & (TerritoryID_Master.Territory_ID.str.startswith(source_territory))])
+    d1 = pd.DataFrame([input_series[header_col]]*row_count, columns = header_col)
+    d2 = pd.DataFrame(TerritoryID_Master[(TerritoryID_Master.Level == expand_to_level) & (TerritoryID_Master.Territory_ID.str.startswith(source_territory))],
+                      columns = TerritoryID_Master.columns)
+    output = pd.concat([d1.reset_index(),d2.reset_index()],axis=1)
+    return(output)
 
-a = quota_master[quota_master.Name == 'John Bradley']['Territory_IDs']
-b = a.str.replace('WW_GLB_MSP_MSP', 'WW_GLB_MSP_MSP_MSP; WW_GLB_MSP_MSP_TEL')
-quota_master.loc[quota_master.Name == 'John Bradley','Territory_IDs'] = b
+# Initiate the Coverage assignment with the Quota assignment
+Coverage_assignment_L = Quota_assignment_L.copy()
+Coverage_assignment_L = Coverage_assignment_L[(Coverage_assignment_L.Name.str.match('^[a-zA-Z]')) & ~(Coverage_assignment_L.Name.str.startswith('SR-'))]
 
-# fill the Blank Coverage Assignment ID to 'No Plan / No Coverage'
+No_assignment = Coverage_assignment_L[Coverage_assignment_L.Territory_ID.isna()]
+#SE_org_coverage = SE_org_coverage[~SE_org_coverage.Territory_ID.isna()]
+#SE_org_coverage = SE_org_coverage[SE_org_coverage.Name != 'Daniel Corbeski']
+#SE_org_coverage = SE_org_coverage[SE_org_coverage.Name != 'Seb Darrington']
 
-#-----------------Create report to show the SE assignment , SE to AE mapping, using Anaplan coverage information--------
-# Read the Territory assignment, Create a Long view for Tableau report
-Territory_assignment_W = quota_master[['Name', 'Title','Resource_Group','HC_Status', 'Email','Manager','Territory_IDs']]
-Territory_assignment_W.Territory_IDs.fillna("",inplace=True)
-len_header = len(Territory_assignment_W.columns)
+# replace SE assignment for those who is not carrying a territory quota, resolve the region/district into territories
+temp = Coverage_assignment_L[(Coverage_assignment_L.Resource_Group == 'SE') & (Coverage_assignment_L.Level != 'Territory') & ~(Coverage_assignment_L.Level.isna())]
 
+temp2 = pd.DataFrame()
+for i in range(len(temp)):
+    working_on_row = temp.index[i] ##
+    temp2 = temp2.append(expand_territory(temp.iloc[i],'Territory'))
+    Coverage_assignment_L.drop([working_on_row], axis='rows', inplace=True) ##
 
-# Split the multiple territory coverage into columns
-temp = Territory_assignment_W['Territory_IDs'].str.split(';', expand=True)
-Territory_assignment_W = pd.merge(Territory_assignment_W, temp, how='left', left_index=True, right_index=True)
+extract_col = ['Name', 'Title', 'Resource_Group', 'HC_Status', 'SFDC_UserID', 'Email', 'Manager', 'Territory_IDs', 'Quota_assignment']    
+Coverage_assignment_L = Coverage_assignment_L.append(temp2[extract_col + list(TerritoryID_Master.columns)])
 
-Coverage_Col = Territory_assignment_W.columns[len_header:]
-for i in Coverage_Col:
-    Territory_assignment_W[i] = Territory_assignment_W[i].str.strip()
-    ## add the code to clean up the territory id to only include the XXX_XXX_XXX part
-
-# Un-pivot the Territory IDs
-Territory_assignment_L = pd.melt(Territory_assignment_W, id_vars=['Name','Title','Resource_Group', 'HC_Status', 'Email', 'Manager','Territory_IDs'], value_vars = Coverage_Col,
-                var_name = 'Coverage_Area_', value_name = 'Territory_ID')
-Territory_assignment_L = Territory_assignment_L[~(Territory_assignment_L.Territory_ID.isnull())] #clean the null data
-
-Territory_assignment_L = pd.merge(Territory_assignment_L, TerritoryID_Master, how='left', left_on='Territory_ID', right_on='Territory_ID')
-Territory_assignment_L.sort_values(by=['Territory_ID','Name'], inplace=True)
-
-# Write the Territory Assignment to a text file
-Territory_assignment_L.to_csv(cfg.output_folder+'Territory_Assignment_Anaplan.txt', sep="|", index=False)
-
-                        
-#------ Create a report on SE assignment w.r.t SFDC sub-division --------------------------------------
-# Typically,
-# SE AVP is assigned to a Theater, SE Director is assigned to Region, and SEM is assigned to District
-# SFDC Sub-Division is mapped with District (~ roughly)
-# SEM SFDC Sub-Division is the District coverage
-# SE Director sub-division includes the District Territory IDs begin with the Region Territory ID
-# SE AVP sub-division includes the District Territory IDs begin with the assigned Theater Territory ID
-#
-# But the America has Direct Sales and ISO in the same district and different sub-division
-# I have to loop through to find the direct report to determine the sub division(s) which a Manager has access
-# SE covers 1 or multiple Territory IDs, thus I have loop using the L view
-#------------------------------------------------------------------------------------------------------- 
-
-# create an new dataframe to host the information
-# it has the Name, email, Sub-Division
-mgr_level = ['SEM']  # how to do SE specialist? they are assigned at different levels, #'SE Director','SE AVP'
-SE_org_coverage = pd.DataFrame(columns = ['Name','Email','Resource_Group','Sub_Division','Manager'])
-
-
-for i in mgr_level:
-    # find the SEM's names
-    mgr_names = Territory_assignment_L[(Territory_assignment_L.Theater=='Americas Theater') & 
-                       (Territory_assignment_L.Resource_Group==i) & 
-                       ~(Territory_assignment_L.Name.str.match('SR-*')) & 
-                       ~(Territory_assignment_L.Name.str.match('^\d'))]['Name']
-    mgr_names = list(dict.fromkeys(mgr_names)) # create a dictionary from the list items as keys, then pull the keys from the dictionary
+temp = Coverage_assignment_L[(Coverage_assignment_L.Resource_Group == 'SEM') & (Coverage_assignment_L.Level != 'District') & ~(Coverage_assignment_L.Level.isna())]
+temp2 = pd.DataFrame()
+for i in range(len(temp)):
+    working_on_row = temp.index[i] ##
+    temp2 = temp2.append(expand_territory(temp.iloc[i],'District'))
+    Coverage_assignment_L.drop([working_on_row], axis='rows', inplace=True) ##
     
-    # find the sub-divisions reporting to the SEMs                 
-    for j in mgr_names:        
-        Sub_Division_List = pd.DataFrame(list(dict.fromkeys(Territory_assignment_L[Territory_assignment_L.Manager == j]['Sub_Division'])), columns=['Sub_Division'])
-        if len(Sub_Division_List) == 0:  # new manager with no reporting
-            Sub_Division_List = Territory_assignment_L[(Territory_assignment_L.Territory_ID.str.contains(Territory_assignment_L[Territory_assignment_L.Name == j]['Territory_ID'].values[0])) &
-                                                       ~(Territory_assignment_L.Sub_Division.isnull())]['Sub_Division'][:1]
-            
-        temp = pd.concat([Territory_assignment_W.loc[Territory_assignment_W.Name==j,['Name','Email','Resource_Group','Manager']]]*(len(Sub_Division_List)), ignore_index=True)
-        temp = pd.concat([temp, Sub_Division_List], axis=1)      
-        SE_org_coverage = SE_org_coverage.append(temp, sort=False)
+Coverage_assignment_L = Coverage_assignment_L.append(temp2[extract_col + list(TerritoryID_Master.columns)])
+
+# Write the Coverage Assignment to a text file
+Coverage_assignment_L.to_csv(cfg.output_folder+'Coverage_Assignment_byName.txt', sep="|", index=False)
 
 
-# remove the blank Sub_Division
-SE_org_coverage = SE_org_coverage[~SE_org_coverage.Sub_Division.isnull()]
-SE_org_coverage = pd.merge(SE_org_coverage,
-                           TerritoryID_Master[(TerritoryID_Master.Theater=='Americas Theater') & ~(TerritoryID_Master.Sub_Division.isnull())][['Sub_Division','Theater','Region','District']],
-                           how='left', left_on='Sub_Division', right_on='Sub_Division')
-# for SEM whoes assignment is not at the district level, the Sub_Divsion cannot join
-#------------------------------------------------------------------------------ 
-# construct the sub-division list for SE Director and SE AVP
-mgr_level = ['SEM','SE Director']
+Coverage_assignment_L.fillna(" ", inplace=True) 
+Coverage_assignment_W = pd.pivot_table(Coverage_assignment_L[['Name','Territory_ID','Resource_Group','SFDC_UserID', 'Email', 'Manager']], \
+                      index = 'Territory_ID', columns='Resource_Group', values=['Name','Email', 'SFDC_UserID'], aggfunc=lambda x: ' | '.join(x))
 
-for i in mgr_level:
-    # find the Manager's of the SEM and SE Director
-    mgr_names = SE_org_coverage[(SE_org_coverage.Theater=='Americas Theater') & 
-                                (SE_org_coverage.Resource_Group==i) &
-                                (SE_org_coverage.Name.str.match('^[^SR-]*')) &
-                                (SE_org_coverage.Name.str.match('^[^\d]*'))
-                                ]['Manager']
-    mgr_names = list(dict.fromkeys(mgr_names)) # create a dictionary from the list items as keys, then pull the keys from the dictionary
-    
-    # find the sub-divisions of the SEM reporting to the SE Director                 
-    for j in mgr_names:        
-        Sub_Division_List = pd.DataFrame(list(dict.fromkeys(SE_org_coverage[SE_org_coverage.Manager == j]['Sub_Division'])), columns=['Sub_Division'])
-        if len(Sub_Division_List) == 0:
-            print('bad') # need to add the code when the new manager has no reporting #I am too tired Mar 1, 2019
-            
-        temp = pd.concat([Territory_assignment_W.loc[Territory_assignment_W.Name==j,['Name','Email','Resource_Group','Manager']]]*(len(Sub_Division_List)), ignore_index=True)
-        temp = pd.concat([temp, Sub_Division_List], axis=1)
-        temp = pd.merge(temp,TerritoryID_Master[(TerritoryID_Master.Theater=='Americas Theater') & ~(TerritoryID_Master.Sub_Division.isnull())][['Sub_Division','Theater','Region','District']],
-                           how='left', left_on='Sub_Division', right_on='Sub_Division')
-        SE_org_coverage = SE_org_coverage.append(temp, sort=False)
+new_name=[]
+for i in Coverage_assignment_W.columns.levels[0]:
+    for j in Coverage_assignment_W.columns.levels[1]:
+        new_name.append(j + " " + i)
+Coverage_assignment_W.columns = Coverage_assignment_W.columns.droplevel(0)
+Coverage_assignment_W.columns=new_name
+Coverage_assignment_W.drop(columns=['  Name','  Email', '  SFDC_UserID'], inplace=True)
 
-
-SE_org_coverage = SE_org_coverage[~(SE_org_coverage.Name.isnull())]
-SE_org_coverage.to_csv(cfg.output_folder+'SE_Hierarchy_2020.txt', sep="|", index=False)
 
 '''
-#-----------------Code using Override Territory IDs if needed -------------------------------------------------------------
-#Populate the Anaplan Id to override column
-quota_master.loc[(quota_master.Override_Territory_IDs.isna()),'Override_Territory_IDs'] = quota_master.Territory_IDs
-
-Territory_assignment_W = quota_master[['Name', 'Title', 'Resource_Group','HC_Status', 'Manager','Override_Territory_IDs']]
-Territory_assignment_W.Override_Territory_IDs.fillna("",inplace=True)
-len_header = len(Territory_assignment_W.columns)
-
-# Split the multiple territory coverage into columns
-temp = Territory_assignment_W['Override_Territory_IDs'].str.split(';', expand=True)
-Territory_assignment_W = pd.merge(Territory_assignment_W, temp, how='left', left_index=True, right_index=True)
-
-Coverage_Col = Territory_assignment_W.columns[len_header:]
-for i in Coverage_Col:
-    Territory_assignment_W[i] = Territory_assignment_W[i].str.strip()
-    ## add the code to clean up the territory id to only include the XXX_XXX_XXX part
-
-# Un-pivot the Territory IDs
-Territory_assignment_L = pd.melt(Territory_assignment_W, id_vars=['Name','Title','Resource_Group', 'HC_Status', 'Manager','Override_Territory_IDs'], value_vars = Coverage_Col,
-                var_name = 'Coverage_Area_', value_name = 'Territory_ID')
-Territory_assignment_L = Territory_assignment_L[~(Territory_assignment_L.Territory_ID.isnull())] #clean the null data
-
-Territory_assignment_L = pd.merge(Territory_assignment_L, TerritoryID_Master, how='left', left_on='Territory_ID', right_on='Territory_ID')
-Territory_assignment_L.sort_values(by=['Territory_ID','Name'], inplace=True)
-
-# Write the Territory Assignment to a text file
-Territory_assignment_L.to_csv(cfg.output_folder+'Territory_Assignment_w_Override.txt', sep="|", index=False)
+check_dup = SE_org_coverage.duplicated(subset=['Territory_ID', 'Name'])
+temp = SE_org_coverage.pivot(index = 'Territory_ID', columns = 'Name')
+temp = SE_org_coverage.pivot(index = 'Territory_ID', columns = 'Resource_Group', values='Name')
 '''
+
+Coverage_assignment_W = Coverage_assignment_W[['Sales QBH Name','SE Name', 'Sales QBH Email', 'SE Email', 'SE SFDC_UserID']].reset_index()
+Coverage_assignment_W.rename(columns = {'Sales QBH Name' : 'Acct_Exec',
+                                        'Sales QBH Email' : 'Acct_Exec_Email',
+                                        'SE Name' : 'Territory_Assigned_SE',
+                                        'SE Email' : 'Territory_Assigned_SE_Email',
+                                        'SE SFDC_UserID' : 'Territory_Assigned_SE_SFDC_UserID'}, inplace=True)
+
+# Write the Coverage Assignment to a text file
+Coverage_assignment_W.to_csv(cfg.output_folder+'Coverage_Assignment_byTerritory.txt', sep="|", index=False)
 
 #------------------------------------------------------------------------------ 
 # Read the individual quota information
+# reading from Compensation team file
 #SE_quota_W = quota_master[(quota_master.Group != 'Sales QBH') & (quota_master.Status=='Active')]\
 #             [['Name','Group','Territory_IDs','M1_Theater','M1_Super_Region','M1_Region','M1_District','M1_Segment', 'Year',
 #               'M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned']]
 
-SE_quota_W = quota_master[(quota_master.Comp_Plan_Title.str.match('Systems Engineer*')) & (quota_master.Status=='Active')]\
-             [['Name','Territory_IDs','M1_Theater','M1_Super_Region','M1_Region','M1_District','M1_Segment', 'Year',
+#SE_quota_W = quota_master[(quota_master.Comp_Plan_Title.str.match('Systems Engineer*')) & (quota_master.Status=='Active')]\
+#             [['Name','Territory_IDs','M1_Theater','M1_Super_Region','M1_Region','M1_District','M1_Segment', 'Year',
+#               'M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned']]
+
+# reading from Anaplan data dump
+SE_quota_W = quota_master[(quota_master.Resource_Group.isin(['SE','SEM','SE Director','SE AVP']))]\
+             [['Name','Territory_IDs','Year', 'Resource_Group', 'SFDC_UserID', 'Email',
+               'M1_Theater','M1_Super_Region','M1_Region','M1_District','M1_Segment', 
                'M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned']]
 
 
 # Un-pivot the SE quota information
-SE_quota_L = pd.melt(SE_quota_W, id_vars=['Name', 'Territory_IDs','M1_Theater','M1_Super_Region','M1_Region','M1_District','M1_Segment', 'Year'],
+SE_quota_L = pd.melt(SE_quota_W, id_vars=['Name', 'Resource_Group','Territory_IDs', 'SFDC_UserID','Email','Year','M1_Theater','M1_Super_Region','M1_Region','M1_District','M1_Segment'],
                      value_vars = ['M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned'],
                      var_name = 'Quarter', value_name = 'Quota')
+
 
 rename_column = { 'M1_Theater' : 'Theater',
                   'M1_Super_Region' : 'Super_Region',
@@ -215,102 +210,203 @@ for i in list(relabel_quarters.keys()):
 
 SE_quota_L.to_csv(cfg.output_folder+'SE_Quota.txt', sep="|", index=False)
 
+
+'''work in progress
+## writing to the database
+server = 'ALIU-X1'
+database = 'ALIU_DB1'
+
+cnxn = pyodbc.connect('DSN=ALIU-X1; Trust_Connection = yes',DRIVER='{ODBC Driver 13 for SQL Server}', SERVER=server, Database=database)
+cursor = cnxn.cursor()
+
+temp = pd.read_sql('Select * from dbo.Territory_Assignment',cnxn)
+cursor.execute("insert into dbo.Territory_Assignment (Name, Territory, Resource_Group, Segment) values ('April Liu','Americas','Testing','Blended')")
+cnxn.commit()
+
+
+Territory_assignment_L.to_sql('dbo.Territory_Assignment', con=cnxn, if_exists='replace')
+'''                        
+#------------------------------------------------------------------------------ 
+# Create a report on SE assignment w.r.t SFDC sub-division 
+# This is use to manage row visibility in Tableau. SFDC visibility is based on the Sub-division, (and add the Territory ID for SEs)
+# Typically,
+# SE AVP is assigned to a Theater, SE Director is assigned to Region, and SEM is assigned to District
+# SFDC Sub-Division is mapped with District (~ roughly)
+# SEM SFDC Sub-Division is the District coverage
+# SE Director sub-division includes the District Territory IDs begin with the Region Territory ID
+# SE AVP sub-division includes the District Territory IDs begin with the assigned Theater Territory ID
+# 
+# Reason for not using the Territory Naming Convension
+# But the America has Direct Sales and ISO in the same district and different sub-division
+# I have to loop through to find the direct report to determine the sub division(s) which a Manager has access
+# SE covers 1 or multiple Territory IDs, thus I have loop using the L view
+#------------------------------------------------------------------------------ 
+#
+# Step 1: Find Manager names of who has SEs reporting, pull the Sub_Divisions of the reporting SEs
+SE_org_coverage = pd.DataFrame(columns = ['Name','Email','SFDC_UserID','Resource_Group','Sub_Division','Manager'])
+
+# find the 1st level Manager's name of who have SE reporting to 
+Manager_of_SE = Coverage_assignment_L[Coverage_assignment_L.Resource_Group=='SE']['Manager']
+Manager_of_SE = list(dict.fromkeys(Manager_of_SE))
+Manager_of_SE = [x for x in Manager_of_SE if ((str(x) != 'nan') & (str(x) != 'NaN'))]
+
+
+## Chris Farmand / Euguen someone are inside sales. and the territory is a direct sales. different from central where the inside sales is overlay
+
+for i in Manager_of_SE:
+    # find the sub-divisions of reporting SE and SE in Territory of (Account Quotas, FlashBlade, Direct Sales                 
+    Sub_Division_List = pd.DataFrame(list(dict.fromkeys(Coverage_assignment_L[(Coverage_assignment_L.Manager == i) &
+                                                                              (Coverage_assignment_L.Hierarchy.isin(['Account Quotas','FlashBlade','Direct Sales']))]\
+                                                                              ['Sub_Division'])), columns=['Sub_Division'])
+    Sub_Division_List.dropna(inplace=True)
+    if len(Sub_Division_List) > 0:   # for the SE Territory is not assigned a Sub_Division value
+        temp = pd.concat([Quota_assignment_W.loc[Quota_assignment_W.Name==i,['Name','Email','SFDC_UserID','Resource_Group','Manager']]]*(len(Sub_Division_List)), ignore_index=True)
+        temp = pd.concat([temp, Sub_Division_List], axis=1)      
+        SE_org_coverage = SE_org_coverage.append(temp, sort=False)
+
+SE_org_coverage = SE_org_coverage[(SE_org_coverage.Sub_Division!=" ") & ~(SE_org_coverage.Sub_Division.isna())]
+
+# Step2: construct the sub-division list for SE Director and SE AVP
+mgr_level = ['SEM','SE Director']
+for i in mgr_level:
+    # find the Manager's of the SEM and SE Director
+    mgr_names = SE_org_coverage[ 
+                                (SE_org_coverage.Resource_Group==i) &
+                                (SE_org_coverage.Name.str.match('^[^SR-]*')) &
+                                (SE_org_coverage.Name.str.match('^[^\d]*'))
+                                ]['Manager']
+    mgr_names = list(dict.fromkeys(mgr_names)) # create a dictionary from the list items as keys, then pull the keys from the dictionary
+    
+    # find the sub-divisions of the SEM reporting to the SE Director                 
+    for j in mgr_names[:1]:        
+        Sub_Division_List = pd.DataFrame(list(dict.fromkeys(SE_org_coverage[SE_org_coverage.Manager == j]['Sub_Division'])), columns=['Sub_Division'])
+        if len(Sub_Division_List) == 0:
+            print('bad') # need to add the code when the new manager has no reporting #I am too tired Mar 1, 2019
+        
+        # The SE Directors are reporting to Nathan Hall (interim for Zack Murphy)  who do have territory/quota assignment
+        header = Quota_assignment_W.loc[Quota_assignment_W.Name==j,['Name','Email','SFDC_UserID','Resource_Group','Manager']]
+        if j == "Nathan Hall" :
+            header = pd.DataFrame([{'Name':'Nathan Hall', 'Email':'nhall@purestorage.com', 'SFDC_UserID':'0050z000006lcFnAAI', 'Resource_Group':'SE AVP', 'Manager':'Alex McMullan'}])
+        
+        #[Quota_assignment_W.loc[Quota_assignment_W.Name==j,['Name','Email','SFDC_UserID','Resource_Group','Manager']]]
+        temp = pd.concat([header]*(len(Sub_Division_List)), ignore_index=True)
+        temp = pd.concat([temp, Sub_Division_List], axis=1)
+        SE_org_coverage = SE_org_coverage.append(temp, sort=False)
+        
+    SE_org_coverage = SE_org_coverage[(SE_org_coverage.Sub_Division!=" ") & ~(SE_org_coverage.Sub_Division.isna())]
+
+
+#remove the duplicates. They are there when a for example SE Director has SE and SEM reporting him.
+SE_org_coverage.drop_duplicates(subset=['SFDC_UserID', 'Sub_Division'], keep='first', inplace=True)
+
+# Step 3: adding exception cases: Users in the supporting organization and needed access
+# dictionary values: email, name, resource group, manager, copy from who
+extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+                'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Nathan Hall']],
+                'Dustin Vo' :['dvo@purestorage.com','SE Support','Manager', ['Nathan Hall']]
+              }
+
+for i in list(extra_users.keys()) :
+    for j in range(0, len(extra_users[i][3])):
+        temp = SE_org_coverage[SE_org_coverage.Name == extra_users[i][3][j]].copy()
+        temp.Name = i
+        temp.Email = extra_users[i][0]
+        temp.Resource_Group = extra_users[i][1]
+        temp.Manager = extra_users[i][2]
+    
+        SE_org_coverage = SE_org_coverage.append(temp)
+                
+SE_org_coverage.rename(columns={'Email':'User'}, inplace=True)
+SE_org_coverage.to_csv(cfg.output_folder+'SE_permission_by_SubDivision.txt', sep="|", index=False)
+
+
+#------------------------------------------------------------------------------ 
+# Step 1: Find the SEs reporting to a SEM, pull the Divisions the SEM have access to
+#------------------------------------------------------------------------------ 
+SE_org_coverage_district = pd.DataFrame(columns = ['Name','Email','SFDC_UserID','Resource_Group','District','Manager'])
+
+# find the Manager's name of who have SE reporting to 
+Manager_of_SE = Coverage_assignment_L[Coverage_assignment_L.Resource_Group=='SE']['Manager']
+Manager_of_SE = list(dict.fromkeys(Manager_of_SE))
+Manager_of_SE = [x for x in Manager_of_SE if ((str(x) != 'nan') & (str(x) != 'NaN'))]
+
+for i in Manager_of_SE:
+    # find the District of reporting SE                 
+    District_List = pd.DataFrame(list(dict.fromkeys(Coverage_assignment_L[(Coverage_assignment_L.Manager == i) &
+                                                                          (Coverage_assignment_L.Hierarchy.isin(['Account Quotas','FlashBlade','Direct Sales']))] \
+                                                                          ['District'])), columns=['District'])
+    District_List.dropna(inplace=True)
+    if len(District_List) > 0:   # for the SE Territory is not assigned a Sub_Division value
+        temp = pd.concat([Quota_assignment_W.loc[Quota_assignment_W.Name==i,['Name','Email','SFDC_UserID','Resource_Group','Manager']]]*(len(District_List)), ignore_index=True)
+        temp = pd.concat([temp, District_List], axis=1)      
+        SE_org_coverage_district = SE_org_coverage_district.append(temp, sort=False)
+
+SE_org_coverage_district = SE_org_coverage_district[(SE_org_coverage_district.District!=" ") & ~(SE_org_coverage_district.District.isna())]
+
+# Step2: construct the division list for SE Director and SE AVP
+mgr_level = ['SEM','SE Director']
+for i in mgr_level:
+    # find the Manager's of the SEM and SE Director
+    mgr_names = SE_org_coverage_district[ 
+                                (SE_org_coverage_district.Resource_Group==i) &
+                                (SE_org_coverage_district.Name.str.match('^[^SR-]*')) &
+                                (SE_org_coverage_district.Name.str.match('^[^\d]*'))
+                                ]['Manager']
+    mgr_names = list(dict.fromkeys(mgr_names)) # create a dictionary from the list items as keys, then pull the keys from the dictionary
+    
+    # find the sub-divisions of the SEM reporting to the SE Director                 
+    for j in mgr_names:        
+        District_List = pd.DataFrame(list(dict.fromkeys(SE_org_coverage_district[SE_org_coverage_district.Manager == j]['District'])), columns=['District'])
+        if len(District_List) == 0:
+            print('bad') # need to add the code when the new manager has no reporting #I am too tired Mar 1, 2019
+
+        # The SE Directors are reporting to Nathan Hall (interim for Zack Murphy)  who do have territory/quota assignment
+        header = Quota_assignment_W.loc[Quota_assignment_W.Name==j,['Name','Email','SFDC_UserID','Resource_Group','Manager']]
+        if j == "Nathan Hall" :
+            header = pd.DataFrame([{'Name':'Nathan Hall', 'Email':'nhall@purestorage.com', 'SFDC_UserID':'0050z000006lcFnAAI', 'Resource_Group':'SE AVP', 'Manager':'Alex McMullan'}])
+            
+        temp = pd.concat([header]*(len(District_List)), ignore_index=True)
+        temp = pd.concat([temp, District_List], axis=1)
+        SE_org_coverage_district = SE_org_coverage_district.append(temp, sort=False)
+        
+    SE_org_coverage_district = SE_org_coverage_district[(SE_org_coverage_district.District!=" ") & ~(SE_org_coverage_district.District.isna())]
+
+#remove the duplicates. They are there when a for example SE Director has SE and SEM reporting him.
+SE_org_coverage_district.drop_duplicates(subset=['SFDC_UserID', 'District'], keep='first', inplace=True)
+
+
+# Step 3: adding exception cases: Users in the supporting organization and needed access
+# dictionary values: email, name, resource group, manager, copy from who
+extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+                'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Nathan Hall']],
+                'Dustin Vo' :['dvo@purestorage.com','SE Support','Manager', ['Nathan Hall']]
+              }
+
+for i in list(extra_users.keys()) :
+    for j in range(0, len(extra_users[i][3])):
+        temp = SE_org_coverage_district[SE_org_coverage_district.Name == extra_users[i][3][j]].copy()
+        temp.Name = i
+        temp.Email = extra_users[i][0]
+        temp.Resource_Group = extra_users[i][1]
+        temp.Manager = extra_users[i][2]
+    
+        SE_org_coverage_district = SE_org_coverage_district.append(temp)
+                
+SE_org_coverage_district.rename(columns={'Email':'User'}, inplace=True)
+SE_org_coverage_district.to_csv(cfg.output_folder+'SE_permission_by_district.txt', sep="|", index=False)
+
+
+             
+''' notes for multi level column header
+#Territory_assignment[Territory_assignment.index.get_level_values('Territory_ID') == 'WW_AMS_COM_CEN_IWC_006']
+Territory_assignment.loc[:, (slice(None),('Sales QBH','SE'))][:3]
+Territory_assignment.loc['WW_AMS_COM_CEN_IWC_006', (slice(None),('Sales QBH','SE'))][:3]
+Territory_assignment.loc['WW_AMS_COM_CEN_IWC_006', (slice(),('Sales QBH','SE'))][:3]
+idx=pd.IndexSlice
+Territory_assignment.loc[idx[:],idx[:, ('Sales QBH','SE')]][:3] # select everything by row index, column Name: select everything of name level 1, name level 2(resource group) = Sales QBH and SE 
+#Territory_assignment[['Name']][:3]
+#Territory_assignment[['SFDC_UserID']][:3]
+
+temp = Territory_assignment.loc[:, (slice(None),('Sales QBH','SE'))].reindex()[:3]
+
 '''
-#===============================================================================
-# Read Opportunity Data from SFDC
-#===============================================================================
-from getData import get_SFDC_Oppt
-
-Oppt = get_SFDC_Oppt(1)
-Oppt.CloseDate = pd.to_datetime(Oppt.CloseDate, format="%Y-%m-%d",errors='coerce')
-Oppt = pd.merge(Oppt, Date_Period, how='left', left_on = 'CloseDate', right_on='Date') #add quarter field to the table
-
-
-# group the opportunity by AE/AE_Territory Id, Quarter + ForecastCategory
-Territory_Qtrly_Pipeline = pd.pivot_table(Oppt, index = ['Acct_Exec', 'Territory_ID', 'Period', 'Quarter', 'Year','ForecastCategoryName'], values=['Amount'], aggfunc=['sum']).reset_index()
-Territory_Qtrly_Pipeline.columns = Territory_Qtrly_Pipeline.columns.droplevel(1)
-
-sel_row = ['FQ1 FY 2020', 'FQ2 FY 2020', 'FQ3 FY 2020', 'FQ4 FY 2020']
-Territory_Qtrly_Pipeline = Territory_Qtrly_Pipeline[Territory_Qtrly_Pipeline.Period.isin(sel_row)]
-
-#===============================================================================
-# Left join Oppt with SE_Quota to find the associated SE(s) to a Opportunity Territory
-# of the Opportunity using Opportunity Owner's Territory Id
-#===============================================================================
-# Bring in the SE(s) assigned to the opportunity territory by merging with the Territory Id
-Territory_Pipeline_SEQuota = pd.merge(Territory_Qtrly_Pipeline, Territory_assignment_L, how = 'left', left_on=['Territory_ID'], right_on=['Territory_ID'])
-# Bring in the SE quota by merging with SE name
-Territory_Pipeline_SEQuota = pd.merge(Territory_Pipeline_SEQuota, SE_quota_L[['Name','Quarter','Quota']], how = 'left', left_on=['Name','Quarter'], right_on=['Name', 'Quarter'])
-Territory_Pipeline_SEQuota = Territory_Pipeline_SEQuota[Territory_Pipeline_SEQuota.ForecastCategoryName != 'Omitted']
-
-
-Territory_Pipeline_temp = Territory_Qtrly_Pipeline[['Territory_ID', 'Quarter','ForecastCategoryName','sum']]
-Territory_Pipeline_temp = pd.merge(Territory_Pipeline_temp, Territory_assignment_L, how = 'left', left_on=['Territory_ID'], right_on=['Territory_ID'])
-
-Territory_Pipeline_temp1 = Territory_Pipeline_temp[['Name','Territory_ID','Theater','Super_Region','Region','District','Segment','Quarter','ForecastCategoryName','sum']]
-SE_quota_L_temp1 = SE_quota_L[['Name','Territory_IDs','Theater','Super_Region','Region','District','Segment','Quarter','Quota']]
-SE_quota_L_temp1['ForecastCategoryName'] = 'Quota'
-SE_quota_L_temp1.rename(columns={'Territory_IDs':'Territory_ID', 'Quota':'sum'}, inplace=True)
-
-Territory_Pipeline_Quota_L = Territory_Pipeline_temp.append(SE_quota_L_temp1, sort = 'Name', ignore_index=False)
-Territory_Pipeline_Quota_L1 = pd.pivot_table(Territory_Pipeline_Quota_L, index=['Name','Quarter','Theater','Region','District'], columns=['ForecastCategoryName'], values='sum' )
-
-
-Territory_Pipeline_Quota_L1.to_csv(cfg.output_folder+'Territory_Pipeline_Quota_LONG.txt', sep="|", index=True)
-#===============================================================================
-# Write the output dataset
-#===============================================================================
-Territory_Pipeline_SEQuota.to_csv(cfg.output_folder+'Territory_Pipeline_Quota.txt', sep="|", index=False)
-
-'''
-
-#===============================================================================
-# Read Opportunity with Split data from SFDC
-#===============================================================================
-
-from getData import get_SFDC_Oppt_Split
-Oppt = get_SFDC_Oppt_Split(1)
-
-Oppt.CloseDate = pd.to_datetime(Oppt.CloseDate, format="%Y-%m-%d",errors='coerce')
-Oppt = pd.merge(Oppt, Date_Period, how='left', left_on = 'CloseDate', right_on='Date') #add quarter field to the table
-
-# group the opportunity by Oppt_Split_User, Oppt_Split_User_Territory_Id, Quarter + ForecastCategory
-# question: do all commissioned user has opportunity id? how about new hirer?
-# what is the process to load AE territory id into SFDC? impact, cannot rely on SFDC for territory id if the process is unreliable
-# question: if AE receive a split, does the assigned SE receive a split?
-Territory_Qtrly_Pipeline = pd.pivot_table(Oppt, index = ['Oppt_Split_User', 'Oppt_Split_User_Territory_Id', 'Period', 'Quarter', 'Year','ForecastCategoryName'],
-                                          values=['SplitAmount'], aggfunc=['sum']).reset_index()
-Territory_Qtrly_Pipeline.columns = Territory_Qtrly_Pipeline.columns.droplevel(1)
-
-sel_row = ['FQ1 FY 2020', 'FQ2 FY 2020', 'FQ3 FY 2020', 'FQ4 FY 2020']
-Territory_Qtrly_Pipeline = Territory_Qtrly_Pipeline[Territory_Qtrly_Pipeline.Period.isin(sel_row)]
-
-#===============================================================================
-# Left join Oppt with SE_Quota to find the associated SE(s) to a Opportunity Territory
-# of the Opportunity using Opportunity Owner's Territory Id
-#===============================================================================
-# Bring in the SE(s) assigned to the opportunity territory by merging with the Territory Id
-Territory_Pipeline_SEQuota = pd.merge(Territory_Qtrly_Pipeline, Territory_assignment_L, how = 'left', left_on=['Oppt_Split_User_Territory_Id'], right_on=['Territory_ID'])
-# Bring in the SE quota by merging with SE name
-Territory_Pipeline_SEQuota = pd.merge(Territory_Pipeline_SEQuota, SE_quota_L[['Name','Quarter','Quota']], how = 'left', left_on=['Name','Quarter'], right_on=['Name', 'Quarter'])
-Territory_Pipeline_SEQuota = Territory_Pipeline_SEQuota[Territory_Pipeline_SEQuota.ForecastCategoryName != 'Omitted']
-
-
-Territory_Pipeline_temp = Territory_Qtrly_Pipeline[['Oppt_Split_User_Territory_Id', 'Quarter','ForecastCategoryName','sum']]
-Territory_Pipeline_temp = pd.merge(Territory_Pipeline_temp, Territory_assignment_L, how = 'left', left_on=['Oppt_Split_User_Territory_Id'], right_on=['Territory_ID'])
-
-Territory_Pipeline_temp1 = Territory_Pipeline_temp[['Name','Oppt_Split_User_Territory_Id','Theater','Super_Region','Region','District','Segment','Quarter','ForecastCategoryName','sum']]
-SE_quota_L_temp1 = SE_quota_L[['Name','Territory_IDs','Theater','Super_Region','Region','District','Segment','Quarter','Quota']]
-SE_quota_L_temp1['ForecastCategoryName'] = 'Quota'
-SE_quota_L_temp1.rename(columns={'Territory_IDs':'Territory_ID', 'Quota':'sum'}, inplace=True)
-
-Territory_Pipeline_Quota_L = Territory_Pipeline_temp.append(SE_quota_L_temp1, sort = 'Name', ignore_index=False)
-Territory_Pipeline_Quota_L1 = pd.pivot_table(Territory_Pipeline_Quota_L, index=['Name','Quarter','Theater','Region','District'], columns=['ForecastCategoryName'], values='sum' )
-
-
-Territory_Pipeline_Quota_L1.to_csv(cfg.output_folder+'Territory_Pipeline_Quota_LONG.txt', sep="|", index=True)
-
-
-### yet to add Flashblade Bookings. Look for FA AE name on the Flashblade deal
-### double check if the FB deal is retiring quota or only extra commission
-

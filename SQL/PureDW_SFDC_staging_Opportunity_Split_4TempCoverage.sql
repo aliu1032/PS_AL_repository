@@ -1,6 +1,7 @@
 SELECT OpptSplit.[Approval_Status__c]
-      ,OpptSplit.[OpportunityId]
-	  ,Ur.Name 'Split Owner Name'
+      ,OpptSplit.[OpportunityId] Id
+	  ,Ur.Name 'SE_Oppt_Owner'
+	  ,Ur.Id 'SE_Oppt_Owner_ID'
 	  ,SplitType.MasterLabel 'Opportunity Split Type'
       ,OpptSplit.[SplitPercentage]
       ,OpptSplit.[SplitAmount]
@@ -12,10 +13,10 @@ SELECT OpptSplit.[Approval_Status__c]
   FROM [PureDW_SFDC_staging].[dbo].[OpportunitySplit] OpptSplit
   left join [PureDW_SFDC_staging].[dbo].[OpportunitySplitType] SplitType on OpptSplit.SplitTypeId = SplitType.Id
   left join [PureDW_SFDC_staging].[dbo].[User] Ur on Ur.Id = OpptSplit.SplitOwnerId
+  left join [PureDW_SFDC_staging].[dbo].[Opportunity] Oppt on Oppt.Id = OpptSplit.OpportunityId
   where 
-  OpptSplit.[CreatedDate] >= '2019-02-01'
-  -- and OpptSplit.[CreatedDate] < '2018-12-01' and 
-  and  OpptSplit.IsDeleted = 'False'
+  Oppt.CloseDate >= '2019-02-01'
+  and OpptSplit.IsDeleted = 'False'
   and Approval_Status__c = 'Yes'
   and SplitType.MasterLabel = 'Temp Coverage' 
-  --  order by OpportunityId
+  order by OpportunityId
