@@ -20,3 +20,5 @@ SELECT OpptSplit.[Approval_Status__c]
   and Approval_Status__c = 'Yes'
   and SplitType.MasterLabel = 'Temp Coverage' 
   order by OpportunityId
+  
+  

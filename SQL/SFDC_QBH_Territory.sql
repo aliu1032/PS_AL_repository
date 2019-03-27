@@ -2,3 +2,4 @@ select Id, User_Type__c, Name, Title, Email, Theater__c, Division, Sub_Division_
 from [PureDW_SFDC_staging].[dbo].[User]
 where QBH_Employee__c = 'True'
 and IsActive = 'True'
+
