@@ -15,7 +15,7 @@ Select    Oppt.Id
 --	, Opptsplit.TC_Percent__c
 --	, Opptsplit.TC_Amount__c
 	, Oppt.StageName Stage
-	, Oppt.ForecastCategoryName
+	, Oppt.ForecastCategoryName ForecastCategory
 	, Oppt.CloseDate
 	, Oppt.Theater__c
 	, Oppt.Division__c
