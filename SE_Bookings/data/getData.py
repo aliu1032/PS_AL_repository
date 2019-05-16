@@ -7,6 +7,7 @@ Created on Jan 11, 2019
 import pandas as pd
 import project_config as cfg
 import pyodbc
+import datetime
 
 
 #=======================================================================
@@ -14,108 +15,130 @@ import pyodbc
 # from The Quota Master File - Reference - Territory Quotas sheet
 #=======================================================================
 def get_TerritoryID_Master(refresh = 1):
-   
-    #target = "FY2019 Quota Master - Local Research.xlsx"
-    #target = "FY2020 Quota Master - PRELIM Local.xlsx"
-    target = "FY2020 Quota Master - PRELIM 03192019.xlsx"
-    supplment = "Supplement.xlsx"
+
+    if (refresh == 1):
+        print ('Refreshing TerritoryID_Master', datetime.datetime.now().strftime("%Y-%m-%d %I:%M:%S %p"))
+        
+        #target = "FY2019 Quota Master - Local Research.xlsx"
+        #target = "FY2020 Quota Master - PRELIM Local.xlsx"
+        #target = "FY2020 Quota Master - PRELIM 03192019.xlsx"
+        #target = "Export Org Hierarchy 04.11.2019.xls"
+        target = "Export Org Coverage and Quota SE Ops 05.01.2019.xls"
+        supplment = "Supplement.xlsx"
+             
+        prep_file = pd.read_excel(cfg.sup_folder + supplment, sheet_name='TerritoryID_Master', skiprows=3, header=0, usecols = "I:M")
+        prep_file = prep_file[prep_file.Include == 1.0]
+        read_cols = ",".join(list(prep_file.Column))
+        new_names = list(prep_file.NewName)
+        data_type = dict(zip(prep_file.NewName, prep_file.DataType))
+          
+        output = pd.read_excel(cfg.source_data_folder + target, sheet_name='Sheet 1', skiprows=2, usecols=read_cols, names=new_names,
+                               dtypes=data_type, keep_default_na=True)
          
-    prep_file = pd.read_excel(cfg.sup_folder + supplment, sheet_name='TerritoryID_Master', skiprows=3, header=0, usecols = "I:M")
-    prep_file = prep_file[prep_file.Include == 1.0]
-    read_cols = ",".join(list(prep_file.Column))
-    new_names = list(prep_file.NewName)
-    data_type = dict(zip(prep_file.NewName, prep_file.DataType))
-      
-    output = pd.read_excel(cfg.source_data_folder + target, sheet_name='Reference - Territory Quotas', skiprows=3, usecols=read_cols, names=new_names,
-                           dtypes=data_type, keep_default_na=True)
-     
-    ''' check for duplicate Territory IDs
-    temp_pd = pd.pivot_table(output, index=["Territory_ID"], values=["Level"], aggfunc='count').rename(columns={'Level':'Rec_Count'})
-    temp = output.groupby('Territory_ID').tail(1) #select the tail of each group
-    '''
-    
-    output['Territory_Description'].replace('\n', "", regex=True, inplace=True) 
-    #a = output[output.Territory_ID=='WW_EMA_EEM_EMS_ZAR_002']['Territory_Description']
-    #b = a.str.replace('\n', " ") 
-    #output.loc[output.Territory_ID=='WW_EMA_EEM_EMS_ZAR_002','Territory_Description'] = b   
-    
-    Territory_Hierarchy = {0 : 'Hierarchy', 
-                           1 : 'Theater',
-                           2 : 'Super-Region',
-                           3 : 'Region',
-                           4 : 'District',
-                           5 : 'Territory'}
-    
-    # in case there is duplicate, take the last of the duplicate
-    output = output[output.Level.isin(Territory_Hierarchy.values())]
-    output = output.groupby('Territory_ID').tail(1)
-    
-    # Using the Territory ID convention, find the territory hierarchy descriptions
-    temp = output['Territory_ID'].str.split('_', expand=True)
-    output = pd.merge(output, temp, how='left', left_index=True, right_index=True)
-    
-    for i in Territory_Hierarchy.keys():
-        temp = output[output.Level == Territory_Hierarchy[i]][['Territory_ID','Territory_Description']]
-        output['temp_key'] = output[0]
-        for j in range(1,i+1):
-            output['temp_key'] = output['temp_key'].str.cat(output[j],sep='_')
-        output = pd.merge(output, temp, how = 'left', left_on=output['temp_key'], right_on='Territory_ID')
-        output.drop(['Territory_ID','Territory_ID_y'], axis=1, inplace=True)
-        output.rename(columns={'Territory_Description_x':'Territory_Description',
-                               'Territory_Description_y': Territory_Hierarchy[i], 
-                               'Territory_ID_x':'Territory_ID'}, inplace=True)
+            
+        output['Short_Description'].replace('\n', "", regex=True, inplace=True) 
+        #a = output[output.Territory_ID=='WW_EMA_EEM_EMS_ZAR_002']['Territory_Description']
+        #b = a.str.replace('\n', " ") 
+        #output.loc[output.Territory_ID=='WW_EMA_EEM_EMS_ZAR_002','Territory_Description'] = b   
         
-    output.drop(Territory_Hierarchy.keys(), axis=1, inplace=True)
-    output.drop(['temp_key'], axis=1, inplace=True)
+        Territory_Hierarchy = {0 : 'Hierarchy', 
+                               1 : 'Theater',
+                               2 : 'Super-Region',
+                               3 : 'Region',
+                               4 : 'District',
+                               5 : 'Territory'}
     
-    # Clean the Hierarchy & Theater values for report
-    output.loc[(output.Hierarchy == 'Account Quotas') & (output.Theater == 'GIobals Account Quotas'), 'Super-Region'] = 'Globals Account program activity'
-    output.loc[(output.Hierarchy == 'Account Quotas') & (output.Theater == 'GIobals Account Quotas'), 'Theater'] = 'Globals Account Quotas'
-    
-    output.loc[(output.Hierarchy == 'Account Quotas') & (output.Theater == 'Enterprise account activity, Globally'), 'Theater'] = 'Enterprise account'
-    output.loc[(output.Hierarchy == 'Account Quotas') & (output.Theater == 'Global Systems Integrator (GSI) program SELL TO and SELL-THROUGH/WITH activity, Globally (Accenture & ATOS & CapGemini & CGI & Cognizant-Trizetto & Deloitte & DXC & Fujitsu & HCL & IBM Global Services & Infosys & PricewaterhouseCoopers & Sopra & TCS & Tech Mahindra & Tsystems & Wipro)'), 'Theater'] \
-                                                                                                                = 'Global Systems Integrator'
-    output.loc[(output.Hierarchy == 'Account Quotas') & (output.Theater == 'G2K Target Account activity, Globally (Alphabet Inc. & American International Group & Apple Inc. & ATOS IDM & Automatic Data Processing Inc. & Aviva PLC & Bank of America Corporation & BT Group PLC & Cisco Systems Inc. & Credit Agricole SA & CVS Health Corporation & Deutsche Telecom AG & Fidelity National Information Services, Inc. & Fiserv, Inc. & FMR LLC & Ford Motor Company & General Motors Company & Honeywell International Inc. & Intel Corporation & Johnson & Johnson & MetLife Inc. & Nationwide Mutual Insurance Company & PayPal Holdings Inc. & PepsiCo, Inc. & The PNC Financial Services Group Inc & Prudential Financial, Inc. & Royal Bank of Canada & Salesforce.com, Inc. & Siemens AG & StateFarm Insurance & Target Corporation & Toyota Motor Corporation & UnitedHealth Group & United Parcel Service Inc. & U.S. Bancorp & Visa Inc. & Volkswagen Aktiengesellschaft & Wal-Mart Stores, Inc. & Wells Fargo & Company & Zurich Insurance Group)'), \
-                                                                                                                'Theater'] \
-                                                                                                                = 'G2K Target Accounts'
-    output.loc[(output.Hierarchy == 'Verticals') & (output.Theater == 'Healthcare Vertical (Providers, Life Sciences & Healthcare Technology) activity, Globally'), 'Theater'] \
-                                                                                                                = 'Healthcare Vertical'
-    output.loc[(output.Theater == 'National Partner program activity in AMER (CDW & Dimension Data & ePlus & Forsythe & Insight Investments & Presidio & SHI & Sirius Solutions & Worldwide Technology) and in EMEA ('),\
-                                                                                                                'Hierarchy'] \
-                                                                                                                = 'National Partner'
-    output.loc[(output.Theater == 'National Partner program activity in AMER (CDW & Dimension Data & ePlus & Forsythe & Insight Investments & Presidio & SHI & Sirius Solutions & Worldwide Technology) and in EMEA ('),\
-                                                                                                                'Theater'] \
-                                                                                                                = 'National Partner'
-    
-    output.loc[(output.Hierarchy == 'Pro Services') & (output.Level != 'Hierarchy'), 'Theater'] \
-                = output.loc[(output.Hierarchy == 'Pro Services') & (output.Level != 'Hierarchy')].Theater.apply(lambda x : x.replace(' Super-Region',''))
-                
-    output.rename(columns = {'Super-Region':'Super_Region'}, inplace=True)
-                
-    #TerritoryID_Master.loc[(TerritoryID_Master.Hierarchy == 'Pro Services') & (TerritoryID_Master.Level != 'Hierarchy'), 'Theater'] \
-    #            = TerritoryID_Master.loc[(TerritoryID_Master.Hierarchy == 'Pro Services') & (TerritoryID_Master.Level != 'Hierarchy')].Theater.str.extract('^(.*?)\ Super-Region')                                                                                             
-    #TerritoryID_Master[TerritoryID_Master.Theater.str.match('National Partner*', na=False)]       
-    
-    # append the SFDC-sub-division mapped to Territory_ID, the excel file is a manually maintained file. this is used at the beginning of year while sales planning in process
-    supplment = "TerritoryID_to_SFDC_SubDivision_Mapping.xlsx"
-    
-    xls = pd.ExcelFile(cfg.sup_folder + supplment, on_demand = True)
-    sheets = xls.sheet_names
-    
-    SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name=sheets[0], header=0, usecols = "N:Q", names=['SFDC_Theater','Division', 'Sub_Division', 'Territory_ID'])
-    '''
-    for i in sheets[:1]:  # use the manual patched sheet
-        temp = pd.read_excel(cfg.sup_folder + supplment, sheet_name=i, header=0, usecols = "J:M",names=['SFDC_Theater','Division','Sub_Division', 'Territory_ID'])
-        #temp['Source'] = i
-        SFDC_sub_division= SFDC_sub_division.append(temp, sort=False)
-    '''
-    SFDC_sub_division = SFDC_sub_division[~SFDC_sub_division.Territory_ID.isnull()]
+        # check for duplicate Territory IDs
+        #temp_pd = pd.pivot_table(output, index=["Territory_ID"], values=["Level"], aggfunc='count').rename(columns={'Level':'Rec_Count'})
+        #temp = output.groupby('Territory_ID').tail(1) #select the tail of each group
         
-    ID_Master = pd.merge(output, SFDC_sub_division, how='left', left_on='Territory_ID', right_on='Territory_ID')       
-    #ID_Master.loc[output.Theater=='Global Systems Integrator','Sub_Division'] = 'GSI'
-    ID_Master.to_csv(cfg.output_folder+'TerritoryID_Master.txt', sep="|", index=False)     
+        # in case there is duplicate, take the last of the duplicate
+        output = output[output.Level.isin(Territory_Hierarchy.values())]
+        output = output.groupby('Territory_ID').tail(1)
+        
+        # Using the Territory ID convention, find the territory hierarchy descriptions
+        temp = output['Territory_ID'].str.split('_', expand=True)
+        output = pd.merge(output, temp, how='left', left_index=True, right_index=True)
+        
+        for i in Territory_Hierarchy.keys():
+            temp = output[output.Level == Territory_Hierarchy[i]][['Territory_ID','Short_Description']]
+            output['temp_key'] = output[0]
+            for j in range(1,i+1):
+                output['temp_key'] = output['temp_key'].str.cat(output[j],sep='_')
+            output = pd.merge(output, temp, how = 'left', left_on=output['temp_key'], right_on='Territory_ID')
+            output.drop(['Territory_ID','Territory_ID_y'], axis=1, inplace=True)
+            output.rename(columns={'Short_Description_x':'Short_Description',
+                                   'Short_Description_y': Territory_Hierarchy[i], 
+                                   'Territory_ID_x':'Territory_ID'}, inplace=True)
+            
+        output.drop(Territory_Hierarchy.keys(), axis=1, inplace=True)
+        output.drop(['temp_key'], axis=1, inplace=True)
+   
+        output.rename(columns = {'Super-Region':'Super_Region'}, inplace=True)
+                    
+        supplment = "TerritoryID_to_SFDC_SubDivision_Mapping.xlsx"
+        
+        xls = pd.ExcelFile(cfg.sup_folder + supplment, on_demand = True)
+        sheets = xls.sheet_names
+        
+        SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name=sheets[0], header=0, usecols = "N:Q", names=['SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division', 'Territory_ID'])
+        '''
+        for i in sheets[:1]:  # use the manual patched sheet
+            temp = pd.read_excel(cfg.sup_folder + supplment, sheet_name=i, header=0, usecols = "J:M",names=['SFDC_Theater','Division','Sub_Division', 'Territory_ID'])
+            #temp['Source'] = i
+            SFDC_sub_division= SFDC_sub_division.append(temp, sort=False)
+        '''
+        SFDC_sub_division = SFDC_sub_division[~SFDC_sub_division.Territory_ID.isnull()]
+            
+        ID_Master = pd.merge(output, SFDC_sub_division, how='left', left_on='Territory_ID', right_on='Territory_ID')       
+        #ID_Master.loc[output.Theater=='Global Systems Integrator','Sub_Division'] = 'GSI'
+        #ID_Master.to_csv(cfg.output_folder+'TerritoryID_Master.txt', sep="|", index=False)     
+               
+        
+        ## writing to the database
+        # import pyodbc
+        from sqlalchemy import create_engine
+        from sqlalchemy import types as sqlalchemy_types
+    
+        '''
+        import urllib
+        params = urllib.parse.quote_plus(r'DRIVER={ODBC Driver 13 for SQL Server};'
+                                         r'SERVER=ALIU-X1;'
+                                         r'DATABASE=ALIU_DB1;'
+                                         r'Trusted_Connection=yes')
+        conn_str = 'mssql+pyodbc:///?={}'.format(params)
+        engine = create_engine(sqlcon)
+        '''
+        
+        server = 'ALIU-X1'
+        database = 'ALIU_DB1'
+        conn_str = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') #work
+        #sqlcon = create_engine("mssql+pyodbc://user:pwd@ALIU-X1") #work
+
+        supplment = "Supplement.xlsx"        
+        to_sql_type = pd.read_excel(cfg.sup_folder + supplment, sheet_name = 'Output_DataTypes', header=0, usecols= "B:D")
+        to_sql_type = to_sql_type[to_sql_type.DB_TableName == 'TerritoryID_Master']
+
+        data_type={}
+        for i in range(0,len(to_sql_type.Columns)):
+            data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
+        
+        ID_Master.to_sql('TerritoryID_Master', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+        
+    else: # not refreshing
+        print ('Reading TerritoryID_Master from database')
+        
+        server = 'ALIU-X1'
+        database = 'ALIU_DB1'
+        table = 'TerritoryID_Master'
+        
+        cnxn = pyodbc.connect('DSN=ALIU-X1; Trust_Connection = yes',DRIVER='{ODBC Driver 13 for SQL Server}', SERVER=server, Database=database)
+        ID_Master = pd.read_sql('select * from ' + table, cnxn)
     
     
+    return(ID_Master)
+
+    # Code to refresh the District to Sub-Division mapping
     '''
     # Since there is not a master in SFDC, export from SFDC User an inventory of Theater, Division, Sub-Division & Territory
     # to get a close to master list
@@ -144,8 +167,6 @@ def get_TerritoryID_Master(refresh = 1):
     # export a version for manual data clean up. 
     verify_map.to_csv(cfg.output_folder+'TerritoryID_Master_4_verify_map.txt', sep="|", index=False)
     '''
-       
-    return(ID_Master)
            
 #===============================================================================
 # Read Quota data from the Quota Master Spreadsheet
@@ -157,7 +178,9 @@ def get_anaplan_quota (refresh=1):
     #target = "FY2019 Quota Master - Local 01312019.xlsx"
     #target = "Employee Coverage and Quota Report 02.14.2019.xlsx"
     #target = "Employee and New Hire Coverage and Quota Report 03.18.2019.xlsx"
-    target = "Export Employee and New Hire Coverage and Quota.xls"
+    #target = "Export Employee and New Hire Coverage and Quota 04.11.2019.xls"
+    #target = "Export Employee and New Hire Coverage and Quota 05.01.2019.xls"
+    target = "Export Employee and New Hire Coverage and Quota 05.08.2019.xls"
     supplment = "Supplement.xlsx"
     
     prep_file = pd.read_excel(cfg.sup_folder + supplment, sheet_name='AnaplanMaster', skiprows=3, header=0, usecols="H,K:M")
@@ -202,7 +225,7 @@ def get_anaplan_quota (refresh=1):
     
     output['Year'] = 'FY 2020'  ##because to match with SFDC, which the FY is a year 'behind'
     #output['HC_Status'] = output['HC_Status'].map({False:'Onboard',True:'TBH'})
-    output['HC_Status'] = output.Employee_ID.str.match("SR-*").map({False:'Onboard',True:'TBH'})
+    output['HC_Status'] = output.EmployeeID.str.match("SR-*").map({False:'Onboard',True:'TBH'})
     
     #-----Derive Resource_Group from Headcount_Group ------------------------------------------
     Resource_Headcount_Group = {
@@ -375,3 +398,36 @@ def get_quota (refresh=1):
     return output
 
 '''
+
+
+'''
+    # Clean the Hierarchy & Theater values for report
+    output.loc[output.Theater.str.match("G2K Target Account activity*", na=False), 'Theater'] = "G2K Target Account activity, Globally"
+    output.loc[output.Theater.str.match("Global Systems Integrator*", na=False), 'Theater'] = "Global Systems Integrator"
+    output.loc[output.Theater.str.match("National Partner program*", na=False), 'Theater'] = "National Partner program"
+    output.loc[output.Theater.str.match('GIobals Account Quotas', na=False), 'Theater'] = 'Globals Account Quotas'
+    
+    output.loc[output['Super-Region'].str.match("G2K Target Account activity, Globally*", na=False),'Super-Region'] = "G2K Target Account activity, Globally" 
+    output.loc[output['Super-Region'].str.match("Global Accounts program activity, Globally*", na=False),'Super-Region'] = "Global Accounts program activity, Globally" 
+    output.loc[output['Super-Region'].str.startswith("Global Systems Integrator (GSI) program SELL-TO", na=False), 'Super-Region'] = "Global Systems Integrator (GSI) program SELL-TO activity, Globally" 
+    output.loc[output['Super-Region'].str.startswith("Global Systems Integrator (GSI) program SELL-THROUGH", na=False), 'Super-Region'] = "Global Systems Integrator (GSI) program SELL-THROUGH/WITH activity, Globally" 
+    output.loc[output['Super-Region'].str.match("National Partner program activity in AMER*", na=False),'Super-Region'] = "National Partner program activity in AMER" 
+
+    output.loc[output['Region'].str.startswith("Global Systems Integrator (GSI) program SELL-TO", na=False), 'Region'] = "Global Systems Integrator (GSI) program SELL-TO activity, Globally" 
+    output.loc[output['Region'].str.startswith("Global Systems Integrator (GSI) program SELL-THROUGH", na=False), 'Region'] = "Global Systems Integrator (GSI) program SELL-THROUGH/WITH activity, Globally" 
+    output.loc[output['Region'].str.match("Enterprise Target Account activity*", na=False),'Region'] = "Enterprise Target Account activity" 
+    output.loc[output['Region'].str.match("National Partner program activity in AMER*", na=False),'Region'] = "National Partner program activity in AMER" 
+
+    output.loc[output['District'].str.startswith("National Partner program activity in AMER", na=False), 'District'] = "National Partner program activity in AMER" 
+    output.loc[output['District'].str.startswith("National Partner program activity in the United Kingdom", na=False), 'District'] = "National Partner program activity in the United Kingdom" 
+    output.loc[output['District'].str.startswith("Global Systems Integrator (GSI) program SELL-TO activity, in the Americas", na=False), 'District'] = "Global Systems Integrator (GSI) program SELL-TO activity, in the Americas" 
+    output.loc[output['District'].str.startswith("Global Systems Integrator (GSI) program SELL-TO activity, in EMEA", na=False), 'District'] = "Global Systems Integrator (GSI) program SELL-TO activity, in EMEA" 
+    output.loc[output['District'].str.startswith("Global Systems Integrator (GSI) program SELL-TO activity, in APJ", na=False), 'District'] = "Global Systems Integrator (GSI) program SELL-TO activity, in APJ" 
+    output.loc[output['District'].str.startswith("Global Systems Integrator (GSI) program SELL-TO activity, in LATAM", na=False), 'District'] = "Global Systems Integrator (GSI) program SELL-TO activity, in LATAM" 
+    output.loc[output['District'].str.startswith("Global Systems Integrator (GSI) program SELL-TO activity, for I6", na=False), 'District'] = "Global Systems Integrator (GSI) program SELL-TO activity, for I6" 
+    output.loc[output['District'].str.startswith("Global Systems Integrator (GSI) program SELL-THROUGH/WITH activity, in the Americas", na=False), 'District'] = "Global Systems Integrator (GSI) program SELL-THROUGH/WITH activity, in the Americas" 
+    output.loc[output['District'].str.startswith("Global Systems Integrator (GSI) program SELL-THROUGH/WITH activity, in EMEA", na=False), 'District'] = "Global Systems Integrator (GSI) program SELL-THROUGH/WITH activity, in EMEA" 
+    output.loc[output['District'].str.startswith("Global Systems Integrator (GSI) program SELL-THROUGH/WITH activity, in APJ", na=False), 'District'] = "Global Systems Integrator (GSI) program SELL-THROUGH/WITH activity, in APJ" 
+    output.loc[output['District'].str.startswith("Global Systems Integrator (GSI) program SELL-THROUGH/WITH activity, in LATAM", na=False), 'District'] = "Global Systems Integrator (GSI) program SELL-THROUGH/WITH activity, in LATAM" 
+    output.loc[output['District'].str.startswith("Global Systems Integrator (GSI) program SELL-THROUGH/WITH activity, for I6", na=False), 'District'] = "Global Systems Integrator (GSI) program SELL-THROUGH/WITH activity, for I6" 
+'''  

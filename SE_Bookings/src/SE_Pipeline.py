@@ -5,7 +5,6 @@ Created on Jan 11, 2019
 '''
 
 import project_config as cfg
-
 import pandas as pd
 
 #===============================================================================
@@ -71,7 +70,8 @@ Oppt_Split['SE_Oppt_Comp'] = Oppt_Split['SE_Oppt_Comp'].map({True:"Retire Quota"
 #Scenario: when this is a split
 # assume all entry are Retire quote
 # it is a low chance that we will have a SE who is not assigned to any of the AE's Territory and temporary cover the oppt
-Oppt_Split.loc[Oppt_Split.SplitPercentage < 100, 'SE_Oppt_Comp'] = 'Retire Quota w Split'
+#Oppt_Split.loc[Oppt_Split.SplitPercentage < 100, 'SE_Oppt_Comp'] = 'Retire Quota w Split'
+Oppt_Split.loc[Oppt_Split.SplitPercentage < 100, 'SE_Oppt_Comp'] = 'Retire Quota'
 
 # Flag the oppt where the SE Oppt Owner is blank. Until a SE Oppt Owner is populated, system cannot determine if this is Retire quota or Temp Coverage
 Oppt_Split.loc[Oppt_Split.SE_Oppt_Owner.isna(), 'SE_Oppt_Comp'] = 'Need SE Oppt Owner'
@@ -116,7 +116,7 @@ Oppt_Split.to_csv(cfg.output_folder+'Opportunity.txt', sep="|", index=False)
 # question: if AE receive a split, does the assigned SE receive a split?
 #'Period', 
 ######Problem here
-Territory_Qtrly_Pipeline = pd.pivot_table(Oppt_Split, index = ['SE_Oppt_Owner_ID','SE_Oppt_Owner_District', 'Quarter', 'Year','ForecastCategoryName'],
+Territory_Qtrly_Pipeline = pd.pivot_table(Oppt_Split, index = ['SE_Oppt_Owner_ID','SE_Oppt_Owner_District', 'Quarter', 'Year','ForecastCategory'],
                                           values=['SplitAmount'], aggfunc=['sum']).reset_index()
 Territory_Qtrly_Pipeline.columns = Territory_Qtrly_Pipeline.columns.droplevel(1)
 Territory_Qtrly_Pipeline.rename(columns = {'sum' : 'Amount', 'SE_Oppt_Owner_ID' : 'SFDC_UserID', 'SE_Oppt_Owner_District':'District'}, inplace=True)
@@ -125,15 +125,18 @@ sel_row = ['Q1', 'Q2', 'Q3', 'Q4']  # because SFDC label is a year behind
 Territory_Qtrly_Pipeline = Territory_Qtrly_Pipeline[Territory_Qtrly_Pipeline.Quarter.isin(sel_row)]
 
 
-# Read the FY20 Quota information
+# Read the FY20 Quota information from Anaplan file
+# There is 1 quota # assigned to a user, the user is tagged to a Theater/Super-Region/Region/District
+# Mapping of District & Sub-Division is at the Territory level
+# Thus cannot map District with Sub-Division. District : Sub-Division is a N : N. A district is mapped to multiple sub-division values and vice versa
 SE_Quota = pd.read_csv(cfg.output_folder + 'SE_Quota.txt', delimiter = '|', header=0)
 SE_Quota.rename(columns={'Name':'SE_Oppt_Owner', 'Quota':'Amount'}, inplace=True)
-SE_Quota['ForecastCategoryName'] = 'Quota'
+SE_Quota['ForecastCategory'] = 'Quota'
 
-Territory_Qtrly_Pipeline = Territory_Qtrly_Pipeline.append(SE_Quota[['SFDC_UserID','District','Year','Quarter','Amount','ForecastCategoryName']], sort=False)
+Territory_Qtrly_Pipeline = Territory_Qtrly_Pipeline.append(SE_Quota[['SFDC_UserID','District','Year','Quarter','Amount','ForecastCategory']], sort=False)
 # merge the SE_Oppt_Owner Territory & Theater information
 temp = pd.pivot_table(SE_Quota, index = ['SFDC_UserID','SE_Oppt_Owner','Resource_Group','Theater','Region','District','Segment','Territory_IDs'],
-                      values='ForecastCategoryName', aggfunc='count').reset_index()
+                      values='ForecastCategory', aggfunc='count').reset_index()
 
 Territory_Qtrly_Pipeline = pd.merge(Territory_Qtrly_Pipeline, temp[['SFDC_UserID','SE_Oppt_Owner','Resource_Group','Theater','Region']] , how='left', left_on='SFDC_UserID',right_on='SFDC_UserID')
 ## remove non employee
