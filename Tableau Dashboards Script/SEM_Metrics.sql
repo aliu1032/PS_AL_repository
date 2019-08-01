@@ -76,7 +76,8 @@ TempCov1 (OpportunityId, Temp_CoveredBy_Name, Temp_CoveredBy_EmployeeId, Max_rnk
 -- Select * into #OpptHist from OpptHist;
 
 select a.* from (
-
+(
+Select b1.*, SE_Half_Quota.Quota [Half_Quota] from (
 /* Base products: FlashArray for FlashArray AE & SE, FlashBlade for FlashBlade AE & SE */
 Select    Oppt.Id
 	, Oppt.Name Opportunity
@@ -85,8 +86,9 @@ Select    Oppt.Id
 	, Oppt.Type
 	, Oppt.Transaction_Type__c Transaction_Type
 
-	, right(oppt.Close_Quarter__c, 4) "Close Year"
+	, 'FY' + cast(cast(right(oppt.Close_Quarter__c, 2) as int) + 1 as varchar(4)) as "Close Year"
 	, left(oppt.Close_Quarter__c, 2) "Close Quarter"
+	, case when left(oppt.Close_Quarter__c, 2) in ('Q1','Q2') then '1H' else '2H' end as Half_Year
 	, Oppt.Theater__c Theater
 	, Oppt.Division__c Division
 	, Oppt.Sub_Division__c Sub_Division
@@ -95,6 +97,7 @@ Select    Oppt.Id
 	, AE.Name AE_Oppt_Owner 
 	, AE.Id AE_Oppt_Owner_SFDC_UserID
 	, AE.Territory_ID__c AE_Oppt_Owner_Territory_ID
+	, Left(AE.Territory_ID__c, 18) as AE_District_ID
 	, AE.IsActive AE_Oppt_Owner_IsActive
 	
 	/* Acct_Exec compensated on the Booking */
@@ -107,6 +110,18 @@ Select    Oppt.Id
 	, SE_oppt_owner.EmployeeNumber SE_Oppt_Owner_EmployeeID
 	, SE_oppt_owner.IsActive SE_Oppt_Owner_ID_IsActive
 	, cast(SE_quota.Quota as decimal(15,2)) Quota
+
+	, cast(SE_Annual_Quota.Quota as decimal(15,2)) SE_Annual_Quota
+
+	, Dist_Quota.Territory_ID District_ID
+	, Dist_Quota.District District
+--	, Dist_Quota.[Quarter] District_Qtr
+	, cast(Dist_Quota.Quota as decimal(15,2)) District_Qtrly_Quota
+
+	, Region_Quota.Territory_ID Region_ID
+	, Region_Quota.Region Region
+--	, Region_Quota.[Quarter] Region_Qtr
+	, cast(Region_Quota.Quota as decimal(15,2)) Region_Qtrly_Quota
 
 	, Case when Assign_SE.SE is null then '' else Assign_SE.SE end [SE assigned to Territory]
 	, Assign_SE.SE_EmployeeID Assigned_SE_EmployeeID
@@ -185,7 +200,11 @@ left join [PureDW_SFDC_staging].[dbo].[User] SE_oppt_owner on SE_Opportunity_Own
 left join [PureDW_SFDC_staging].[dbo].[OpportunitySplit] OpptSplit on Oppt.Id = OpptSplit.OpportunityId
 left join [PureDW_SFDC_staging].[dbo].[User] OpptSplitUr on OpptSplitUr.Id = OpptSplit.SplitOwnerId
 left join [SalesOps_DM].[dbo].[Coverage_assignment_byTerritory] Assign_SE on Assign_SE.Territory_ID = OpptSplitUr.Territory_ID__c -- pull in the Territory assigned SEs
-left join [SalesOps_DM].[dbo].[SE_Org_Quota] SE_Quota on (SE_Quota.EmployeeID = SE_oppt_owner.EmployeeNumber and SE_Quota.[Quarter] = left(oppt.Close_Quarter__c, 2))
+left join [SalesOps_DM].[dbo].[SE_Org_Quota] SE_Quota on (SE_Quota.EmployeeID = SE_oppt_owner.EmployeeNumber and SE_Quota.[Period] = left(oppt.Close_Quarter__c, 2))
+left join (Select EmployeeID, cast(Quota as decimal(18,2)) Quota from [SalesOps_DM].[dbo].[SE_Org_Quota] where Period = 'FY') 
+			SE_Annual_Quota on (SE_Annual_Quota.EmployeeID = SE_oppt_owner.EmployeeNumber) -- Need Annual Quota
+left join [SalesOps_DM].[dbo].[Territory_Quota] Dist_Quota on (Dist_Quota.Territory_ID = Left(AE.Territory_ID__c, 18) and Dist_Quota.Quarter = left(oppt.Close_Quarter__c, 2))
+left join [SalesOps_DM].[dbo].[Territory_Quota] Region_Quota on (Region_Quota.Territory_ID = Left(AE.Territory_ID__c, 14) and Region_Quota.Quarter = left(oppt.Close_Quarter__c, 2))
 left join [PureDW_SFDC_staging].[dbo].[OpportunitySplitType] SplitType on OpptSplit.SplitTypeId = SplitType.Id
 left join #TempCov on #TempCov.OpportunityId = Oppt.Id
 left join #OpptHist on #OpptHist.OpportunityId = Oppt.Id
@@ -196,8 +215,13 @@ and Oppt.Theater__c != 'Renewals'
 and SplitType.MasterLabel = 'Revenue'  --'Temp Coverage','Overlay'
 and OpptSplit.IsDeleted = 'False'
 
+) b1
+left join (Select EmployeeID, [Period], cast(Quota as decimal(18,2)) Quota from [SalesOps_DM].[dbo].[SE_Org_Quota] where Period in ('1H', '2H')) SE_Half_Quota on
+		  (SE_Half_Quota.EmployeeID = b1.SE_Oppt_Owner_EmployeeID and SE_Half_Quota.[Period] = b1.Half_Year) 
+)
 UNION
-
+(
+select b2.*, SE_Half_Quota2.Quota [Half_Quota] from (
 /* Overlay Product: FlashBlade Opportunity for FlashArray AE & SE */
 
 
@@ -216,8 +240,9 @@ Select    Oppt.Id
 	, Oppt.Type
 	, Oppt.Transaction_Type__c Transaction_Type
 
-	, right(oppt.Close_Quarter__c, 4) "Close Year"
+	, 'FY' + cast(cast(right(oppt.Close_Quarter__c, 2) as int) + 1 as varchar(4)) as "Close Year"
 	, left(oppt.Close_Quarter__c, 2) "Close Quarter"
+	, case when left(oppt.Close_Quarter__c, 2) in ('Q1','Q2') then '1H' else '2H' end as Half_Year
 	, Oppt.Theater__c Theater
 	, Oppt.Division__c Division
 	, Oppt.Sub_Division__c Sub_Division
@@ -225,6 +250,7 @@ Select    Oppt.Id
 	, AE.Name AE_Oppt_Owner
 	, AE.Id AE_Oppt_Owner_SFDC_UserID
 	, AE.Territory_ID__c AE_Oppt_Owner_Territory_ID
+	, Left(AE.Territory_ID__c, 18) as AE_District_ID
 	, AE.IsActive AE_Oppt_Owner_IsActive
 
 	/* FlashBlade booking for FlashArray Team */
@@ -247,6 +273,18 @@ Select    Oppt.Id
 	, FA_SE.EmployeeNumber SE_Oppt_Owner_EmployeeID
 	, FA_SE.IsActive SE_Oppt_Owner_ID_IsActive
 	, cast(SE_quota.Quota as decimal(15,2)) Quota
+
+	, cast(SE_Annual_Quota.Quota as decimal(15,2)) SE_Annual_Quota
+
+	, Dist_Quota.Territory_ID District_ID
+	, Dist_Quota.District District
+--	, Dist_Quota.[Quarter] District_Qtr
+	, cast(Dist_Quota.Quota as decimal(15,2)) District_Qtrly_Quota
+
+	, Region_Quota.Territory_ID Region_ID
+	, Region_Quota.Region Region
+--	, Region_Quota.[Quarter] Region_Qtr
+	, cast(Region_Quota.Quota as decimal(15,2)) Region_Qtrly_Quota
 
 	, Case when Assign_SE.SE is null then '' else Assign_SE.SE end [SE assigned to Territory]
 	, Assign_SE.SE_EmployeeID Assigned_SE_EmployeeID
@@ -317,7 +355,12 @@ left join [PureDW_SFDC_staging].[dbo].[User] SE on SE_Opportunity_Owner__c = SE.
 left join [PureDW_SFDC_Staging].[dbo].[User] FA_AE on FA_AE.Id = Oppt.Flash_Array_AE1__c
 left join [PureDW_SFDC_Staging].[dbo].[User] FA_SE on FA_SE.Id = Oppt.Flash_Array_SE1__c
 left join [SalesOps_DM].[dbo].[Coverage_assignment_byTerritory] Assign_SE on Assign_SE.Territory_ID = FA_AE.Territory_ID__c
-left join [SalesOps_DM].[dbo].[SE_Org_Quota] SE_Quota on (SE_Quota.EmployeeID = FA_SE.EmployeeNumber and SE_Quota.[Quarter] = left(oppt.Close_Quarter__c, 2))
+left join [SalesOps_DM].[dbo].[SE_Org_Quota] SE_Quota on (SE_Quota.EmployeeID = FA_SE.EmployeeNumber and SE_Quota.[Period] = left(oppt.Close_Quarter__c, 2))
+left join (Select EmployeeID, cast(Quota as decimal(18,2)) Quota from [SalesOps_DM].[dbo].[SE_Org_Quota] where Period = 'FY') 
+			SE_Annual_Quota on (SE_Annual_Quota.EmployeeID = FA_SE.EmployeeNumber) -- Need Annual Quota
+left join [SalesOps_DM].[dbo].[Territory_Quota] Dist_Quota on (Dist_Quota.Territory_ID = Left(AE.Territory_ID__c, 18) and Dist_Quota.Quarter = left(oppt.Close_Quarter__c, 2))
+left join [SalesOps_DM].[dbo].[Territory_Quota] Region_Quota on (Region_Quota.Territory_ID = Left(AE.Territory_ID__c, 14) and Region_Quota.Quarter = left(oppt.Close_Quarter__c, 2))
+
 left join [PureDW_SFDC_staging].[dbo].[OpportunitySplit] OpptSplit on Oppt.Id = OpptSplit.OpportunityId
 left join [PureDW_SFDC_staging].[dbo].[User] OpptSplitUr on OpptSplitUr.Id = OpptSplit.SplitOwnerId
 left join [PureDW_SFDC_staging].[dbo].[OpportunitySplitType] SplitType on OpptSplit.SplitTypeId = SplitType.Id
@@ -329,7 +372,12 @@ and (Oppt.Transaction_Type__c is null or Oppt.Transaction_Type__c != 'ES2 Renewa
 and Oppt.Theater__c = 'FlashBlade'
 and (Oppt.Flash_Array_AE1__c is not Null or Oppt.Flash_Array_SE1__c is not Null)
 
+) b2
+left join (Select EmployeeID, [Period], cast(Quota as decimal(18,2)) Quota from [SalesOps_DM].[dbo].[SE_Org_Quota] where Period in ('1H', '2H')) SE_Half_Quota2 on
+		  (SE_Half_Quota2.EmployeeID = b2.SE_Oppt_Owner_EmployeeID and SE_Half_Quota2.[Period] = b2.Half_Year)
+)
 ) a
+--where Sub_Division like 'ISO%'
 where id like '0060z00001zRtXxAAK%'
 
 --where a.Id in ('0060z00001yoY1JAAU', '0060z00001yR9qbAAC') 'Arian Bexheti','Dean Brady',
@@ -352,3 +400,4 @@ select
 		   and SplitType.MasterLabel = 'Overlay'
 		   order by OpptSplit.OpportunityId
 */
+

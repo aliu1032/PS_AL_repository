@@ -222,11 +222,15 @@ SE_quota_W = quota_master[quota_master.Job_Family == 'Systems Engineering']\
                'M1_Theater','M1_Super_Region','M1_Region','M1_District','M1_Segment', 
                'M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned']]
 
+## calculate the 1H, 2H and Annual quota
+SE_quota_W['1H'] = SE_quota_W['M1_Q1_Quota_Assigned'] + SE_quota_W['M1_Q2_Quota_Assigned']
+SE_quota_W['2H'] = SE_quota_W['M1_Q3_Quota_Assigned'] + SE_quota_W['M1_Q4_Quota_Assigned']
+SE_quota_W['FY'] = SE_quota_W['M1_Q1_Quota_Assigned'] + SE_quota_W['M1_Q2_Quota_Assigned'] + SE_quota_W['M1_Q3_Quota_Assigned'] + SE_quota_W['M1_Q4_Quota_Assigned']
 
 # Un-pivot the SE quota information
 SE_quota_L = pd.melt(SE_quota_W, id_vars=['Name', 'Resource_Group','Territory_IDs', 'EmployeeID', 'SFDC_UserID','Email','Year','M1_Theater','M1_Super_Region','M1_Region','M1_District','M1_Segment'],
-                     value_vars = ['M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned'],
-                     var_name = 'Quarter', value_name = 'Quota')
+                     value_vars = ['M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned', '1H','2H','FY'],
+                     var_name = 'Period', value_name = 'Quota')
 
 
 rename_column = { 'M1_Theater' : 'Theater',
@@ -243,7 +247,7 @@ relabel_quarters = {'M1_Q1_Quota_Assigned' : 'Q1',
                   'M1_Q4_Quota_Assigned' : 'Q4'}
 
 for i in list(relabel_quarters.keys()):
-    SE_quota_L.loc[SE_quota_L.Quarter==i,'Quarter'] = relabel_quarters[i]
+    SE_quota_L.loc[SE_quota_L.Period==i,'Period'] = relabel_quarters[i]
 
 
 #SE_quota_L.to_csv(cfg.output_folder+'SE_Quota.txt', sep="|", index=False)
@@ -326,11 +330,13 @@ for i in mgr_level:
         if len(Sub_Division_List) == 0:
             print('bad') # need to add the code when the new manager has no reporting #I am too tired Mar 1, 2019
         
+        
         # The SE Directors are reporting to Nathan Hall (interim for Zack Murphy)  who do have territory/quota assignment
         header = Quota_assignment_W.loc[Quota_assignment_W.Name==j,['Name','Email','SFDC_UserID','Resource_Group','Manager']]
+        '''
         if j == "Nathan Hall" :
             header = pd.DataFrame([{'Name':'Nathan Hall', 'Email':'nhall@purestorage.com', 'SFDC_UserID':'0050z000006lcFnAAI', 'Resource_Group':'SE AVP', 'Manager':'Alex McMullan'}])
-        
+        '''
         #[Quota_assignment_W.loc[Quota_assignment_W.Name==j,['Name','Email','SFDC_UserID','Resource_Group','Manager']]]
         temp = pd.concat([header]*(len(Sub_Division_List)), ignore_index=True)
         temp = pd.concat([temp, Sub_Division_List], axis=1)
@@ -346,7 +352,9 @@ SE_SubDivision_Permission.drop_duplicates(subset=['SFDC_UserID', 'SFDC_Sub_Divis
 # dictionary values: email, name, resource group, manager, copy from who
 extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
                 'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Nathan Hall']],
-                'Dustin Vo' :['dustin@purestorage.com','SE Support','Manager', ['Nathan Hall']]
+                'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+                #'Dustin Vo' :['dustin@purestorage.com','SE Support','Manager', ['Nathan Hall']]
+                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']]
               }
 
 for i in list(extra_users.keys()) :
@@ -418,12 +426,14 @@ for i in mgr_level:
         District_List = pd.DataFrame(list(dict.fromkeys(SE_District_Permission[SE_District_Permission.Manager == j]['District'])), columns=['District'])
         if len(District_List) == 0:
             print('bad') # need to add the code when the new manager has no reporting #I am too tired Mar 1, 2019
-
+        
+        
         # The SE Directors are reporting to Nathan Hall (interim for Zack Murphy)  who do have territory/quota assignment
         header = Quota_assignment_W.loc[Quota_assignment_W.Name==j,['Name','Email','SFDC_UserID','Resource_Group','Manager']]
+        '''
         if j == "Nathan Hall" :
             header = pd.DataFrame([{'Name':'Nathan Hall', 'Email':'nhall@purestorage.com', 'SFDC_UserID':'0050z000006lcFnAAI', 'Resource_Group':'SE AVP', 'Manager':'Alex McMullan'}])
-            
+        '''    
         temp = pd.concat([header]*(len(District_List)), ignore_index=True)
         temp = pd.concat([temp, District_List], axis=1)
         SE_District_Permission = SE_District_Permission.append(temp, sort=False)
@@ -438,7 +448,10 @@ SE_District_Permission.drop_duplicates(subset=['SFDC_UserID', 'District'], keep=
 # dictionary values: email, name, resource group, manager, copy from who
 extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
                 'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Nathan Hall']],
-                'Dustin Vo' :['dustin@purestorage.com','SE Support','Manager', ['Nathan Hall']]
+                'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+                #'Dustin Vo' :['dustin@purestorage.com','SE Support','Manager', ['Nathan Hall']]
+                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']]
+
               }
 
 for i in list(extra_users.keys()) :
@@ -511,9 +524,10 @@ for i in mgr_level:
         
         # The SE Directors are reporting to Nathan Hall (interim for Zack Murphy)  who do have territory/quota assignment
         header = Quota_assignment_W.loc[Quota_assignment_W.Name==j,['Name','Email','SFDC_UserID','Resource_Group','Manager']]
+        ''' Nathan become the offical AMER VP
         if j == "Nathan Hall" :
             header = pd.DataFrame([{'Name':'Nathan Hall', 'Email':'nhall@purestorage.com', 'SFDC_UserID':'0050z000006lcFnAAI', 'Resource_Group':'SE AVP', 'Manager':'Alex McMullan'}])
-        
+        '''
         #[Quota_assignment_W.loc[Quota_assignment_W.Name==j,['Name','Email','SFDC_UserID','Resource_Group','Manager']]]
         temp = pd.concat([header]*(len(Subordinate_List)), ignore_index=True)
         temp = pd.concat([temp, Subordinate_List], axis=1)
@@ -530,7 +544,8 @@ SE_Subordinate_Permission.drop_duplicates(subset=['SFDC_UserID', 'Subordinate'],
 extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
                 'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
                 'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                'Dustin Vo' :['dustin@purestorage.com','SE Support','Manager', ['Nathan Hall']]
+                #'Dustin Vo' :['dustin@purestorage.com','SE Support','Manager', ['Nathan Hall']]
+                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']]
               }
 
 for i in list(extra_users.keys()) :
