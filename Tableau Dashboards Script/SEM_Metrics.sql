@@ -73,9 +73,76 @@ TempCov1 (OpportunityId, Temp_CoveredBy_Name, Temp_CoveredBy_EmployeeId, Max_rnk
 					) groups
 			where [Row Number] = 1
 )
--- Select * into #OpptHist from OpptHist;
 
-select a.* from (
+
+select a.* 
+	, Case 
+		when cast(subString(a.Stage,7,1) as Int) <= 3 then 'Low Stage'
+		when cast(subString(a.Stage,7,1) as Int) <= 7 then 'Advanced Stage'
+		when a.Stage in ('Stage 8 - Closed/Won','Stage 8 - Credit') then 'Closed/Won'
+		when a.Stage in ('Stage 8 - Closed/ Disqualified','Stage 8 - Closed/Lost','Stage 8 - Closed/No Decision', 'Stage 8 - Closed/ Low Capacity') then 'Closed/Loss'
+		else 'Unclassified'
+	  end StageGroup
+
+	, CASE When a.[Close Date] = a.[Previous CloseDate] Then 'N' Else 'Y' END CloseDate_changed
+
+	, Case When (a.Oppt_Amount is null) and (a.[Previous Amount] is null) then 'N'
+		   When (a.Oppt_Amount is null) and (a.[Previous Amount] is not null) then 'Y'
+		   When (a.Oppt_Amount is not null) and (a.[Previous Amount] is null) then 'Y'
+		   When a.Oppt_Amount - a.[Previous Amount] = 0 Then 'N' Else 'Y' 
+	  End Amt_changed	
+
+	, CASE When a.ForecastCategory = a.[Previous ForecastCategory] Then 'N' Else 'Y' End ForecastCategory_changed
+	, CASE When a.Stage = a.[Previous Stage] Then 'N' Else 'Y' END Stage_changed
+
+	, Case   
+			 when a.CreatedDate >= (getdate()-7) then 'New'
+			 when (a.CreatedDate < (getdate()-7)) and (a.Stage != a.[Previous Stage] or a.[Close Date] != a.[Previous CloseDate]) then 'Updated'
+			 when (a.CreatedDate < (getdate()-7)) and (a.Amount is not null and a.[Previous Amount] is null) then 'Updated'
+			 when (a.CreatedDate < (getdate()-7)) and (a.Amount is null and a.[Previous Amount] is not null) then 'Updated'
+			 when (a.CreatedDate < (getdate()-7)) and (a.Amount is not null and a.[Previous Amount] is not null and a.Oppt_Amount_in_USD-a.[Previous Amount] != 0) then 'Updated'
+			 else 'No Change'
+	  end Change_Since_SnapShot
+	  	  
+	, case -- have to tag in this sequence: Closed, New, the stage change. 
+		when (a.[Close Date] >= (getdate()-7) and a.Stage in ('Stage 8 - Closed/Won','Stage 8 - Credit')) then 'Won' -- Closed in last 7 days
+		when (a.[Close Date] >= (getdate()-7) and a.Stage in ('Stage 8 - Closed/ Disqualified','Stage 8 - Closed/Lost','Stage 8 - Closed/No Decision', 'Stage 8 - Closed/ Low Capacity'))
+												then 'Loss, Disqualified, Undecided' -- Closed in last 7 days
+		when a.CreatedDate >= (getdate()-7) then 'New'   -- New in the last 7 days
+		when cast(SUBSTRING(a.Stage, 7, 1) as Int) > cast(SUBSTRING(a.[Previous Stage], 7, 1) as Int) then 'Advanced'
+		when cast(SUBSTRING(a.Stage, 7, 1) as Int) < cast(SUBSTRING(a.[Previous Stage], 7, 1) as Int) then 'Setback'
+		when cast(SUBSTRING(a.Stage, 7, 1) as Int) = cast(SUBSTRING(a.[Previous Stage], 7, 1) as Int) then 'No change'
+		end Stage_changed_how
+	  
+	, case when (a.[Close Date] >= (getdate()-7) and cast(SUBSTRING(a.Stage, 7,1) as Int) = 8) then 1 else 0 end as Closed_Count
+	, Case when (a.CreatedDate >= (getdate()-7) and cast(SUBSTRING(a.Stage, 7,1) as Int) != 8) then 1 else 0 end as New_Count  -- New this week and have not closed
+	, case when cast(SUBSTRING(a.Stage, 7, 1) as Int) > cast(SUBSTRING(a.[Previous Stage], 7, 1) as Int) and
+				cast(SUBSTRING(a.Stage, 7,1) as Int) != 8 and  -- not advanced to close
+				a.CreatedDate < (getdate()-7)  -- not new this week
+		   then 1 else 0 end Stage_Advanced_Count	  
+	, case when cast(SUBSTRING(a.Stage, 7, 1) as Int) < cast(SUBSTRING(a.[Previous Stage], 7, 1) as Int) and
+				a.CreatedDate < (getdate()-7)  -- not new this week
+		   then 1 else 0 end Stage_Setback_Count
+
+		
+	, Case when a.Stage in ('Stage 8 - Closed/Won','Stage 8 - Credit') then a.Amount_in_USD else 0 end Won$
+	, Case when a.Stage in ('Stage 8 - Closed/ Disqualified','Stage 8 - Closed/Lost','Stage 8 - Closed/No Decision', 'Stage 8 - Closed/ Low Capacity') then a.Amount_in_USD else 0 end Loss$
+	, case when a.Stage in ('Stage 0 - Internal Lead',
+				 'Stage 1 - Prequalified',
+				 'Stage 2 - At Risk', 'Stage 2 - Qualified', 'Stage 2 - Qualified (RFP, unsolicited proposal, etc.)', 'Stage 2 - Quote Sent',
+				 'Stage 3 - Requirements Defined',
+				 'Stage 4 - POC/EVAL Engaged', 'Stage 4 - POC/EVAL Waived', 'Stage 4 - POC/EVAL Waived',
+				 'Stage 5 - POC/EVAL Complete', 'Stage 5 - Negotiation/Review (Reiteration)', 'Stage 5 - Negotiations'
+				 ) then a.Amount_in_USD
+		   when a.Stage in ('Stage 6 - Commit','Stage 7 - Commit (Approved Pre-build)', 'Stage 7 - Commit (Approved Pre-build - HOLD)', 'Stage 7 - Commit (Approved Pre-build - SHIP)') then a.Amount_in_USD
+	   else 0.00
+	   end as [Open$]
+	   
+    /* populate empty SE_Oppt_Owner_EmployeeID with Opportunity-Sub_Division such that the deal are pulled into the user Tableau view,
+     * in tableau, allow a user to see opportunity that is owned by his/her subordinate or is fall into the sub-division where he/she have access */
+	, Case when a.SE_Oppt_Owner_EmployeeID_t is null then a.Sub_Division else cast(a.SE_Oppt_Owner_EmployeeID_t as nvarchar(10)) end as SE_Oppt_Owner_EmployeeID
+	 
+from (
 (
 Select b1.*, SE_Half_Quota.Quota [Half_Quota] from (
 /* Base products: FlashArray for FlashArray AE & SE, FlashBlade for FlashBlade AE & SE */
@@ -103,31 +170,20 @@ Select    Oppt.Id
 	/* Acct_Exec compensated on the Booking */
 	, 'Base' Comp_Category
 	, OpptSplitUr.Name Acct_Exec
-	, OpptSplitUr.Territory_ID__c Acct_Exec_Territory_ID  -- changed may 3
+	, OpptSplitUr.Territory_ID__c Acct_Exec_Territory_ID
 
 	, SE_oppt_owner.Name SE_Oppt_Owner
 	, SE_oppt_owner.Id SE_Oppt_Owner_SFDC_UserID
-	, SE_oppt_owner.EmployeeNumber SE_Oppt_Owner_EmployeeID
+	, SE_oppt_owner.EmployeeNumber SE_Oppt_Owner_EmployeeID_t
+	
 	, SE_oppt_owner.IsActive SE_Oppt_Owner_ID_IsActive
 	, cast(SE_quota.Quota as decimal(15,2)) Quota
-
 	, cast(SE_Annual_Quota.Quota as decimal(15,2)) SE_Annual_Quota
-
-	, Dist_Quota.Territory_ID District_ID
-	, Dist_Quota.District District
---	, Dist_Quota.[Quarter] District_Qtr
-	, cast(Dist_Quota.Quota as decimal(15,2)) District_Qtrly_Quota
-
-	, Region_Quota.Territory_ID Region_ID
-	, Region_Quota.Region Region
---	, Region_Quota.[Quarter] Region_Qtr
-	, cast(Region_Quota.Quota as decimal(15,2)) Region_Qtrly_Quota
 
 	, Case when Assign_SE.SE is null then '' else Assign_SE.SE end [SE assigned to Territory]
 	, Assign_SE.SE_EmployeeID Assigned_SE_EmployeeID
 
 	, #TempCov.Temp_CoveredBy_Name
---	, #TempCov.Temp_CoveredBy_SFDC_UserID
 	, #TempCov.Temp_CoveredBy_EmployeeID
 
 	, case
@@ -167,6 +223,7 @@ Select    Oppt.Id
 
 	, Oppt.ForecastCategoryName ForecastCategory
 	, Oppt.StageName Stage
+
 	, cast(Oppt.CloseDate as Date) "Close Date"
 	, convert(date, oppt.CreatedDate) CreatedDate
 
@@ -176,22 +233,6 @@ Select    Oppt.Id
 	, #OpptHist.ForecastCategory [Previous ForecastCategory]
 	, #OpptHist.StageName [Previous Stage]
 	, convert(date, #OpptHist.CloseDate) [Previous CloseDate]
-
-	, CASE When Oppt.ForecastCategory = #OpptHist.ForecastCategory Then 'N' Else 'Y' End ForecastCategory_changed
-	, CASE When oppt.StageName = #OpptHist.StageName Then 'N' Else 'Y' END Stage_changed
-	, CASE When oppt.CloseDate = #OpptHist.CloseDate Then 'N' Else 'Y' END Date_changed
-	, Case When (oppt.Amount is null) and (#OpptHist.Amount is null) then 'N'
-		   When (oppt.Amount is null) and (#OpptHist.Amount is not null) then 'Y'
-		   When (oppt.Amount is not null) and (#OpptHist.Amount is null) then 'Y'
-		   When oppt.Amount - #OpptHist.Amount = 0 Then 'N' Else 'Y' 
-		End Amt_changed
-	, Case when oppt.CreatedDate >= (getdate()-7) then 'New'
-			 when (oppt.CreatedDate < (getdate()-7)) and (oppt.StageName != #OpptHist.StageName or oppt.CloseDate != #OpptHist.CloseDate) then 'Updated'
-			 when (oppt.CreatedDate < (getdate()-7)) and (oppt.Amount is not null and #OpptHist.Amount is null) then 'Updated'
-			 when (oppt.CreatedDate < (getdate()-7)) and (oppt.Amount is null and #OpptHist.Amount is not null) then 'Updated'
-			 when (oppt.CreatedDate < (getdate()-7)) and (oppt.Amount is not null and #OpptHist.Amount is not null and oppt.Converted_Amount_USD__c-#OpptHist.Amount != 0) then 'Updated'
-			 else 'No Change'
-		end Change_Since_SnapShot
 
 from [PureDW_SFDC_staging].[dbo].[Opportunity] Oppt
 left join [PureDW_SFDC_staging].[dbo].RecordType RecType on RecType.Id = Oppt.RecordTypeId
@@ -203,8 +244,6 @@ left join [SalesOps_DM].[dbo].[Coverage_assignment_byTerritory] Assign_SE on Ass
 left join [SalesOps_DM].[dbo].[SE_Org_Quota] SE_Quota on (SE_Quota.EmployeeID = SE_oppt_owner.EmployeeNumber and SE_Quota.[Period] = left(oppt.Close_Quarter__c, 2))
 left join (Select EmployeeID, cast(Quota as decimal(18,2)) Quota from [SalesOps_DM].[dbo].[SE_Org_Quota] where Period = 'FY') 
 			SE_Annual_Quota on (SE_Annual_Quota.EmployeeID = SE_oppt_owner.EmployeeNumber) -- Need Annual Quota
-left join [SalesOps_DM].[dbo].[Territory_Quota] Dist_Quota on (Dist_Quota.Territory_ID = Left(AE.Territory_ID__c, 18) and Dist_Quota.Quarter = left(oppt.Close_Quarter__c, 2))
-left join [SalesOps_DM].[dbo].[Territory_Quota] Region_Quota on (Region_Quota.Territory_ID = Left(AE.Territory_ID__c, 14) and Region_Quota.Quarter = left(oppt.Close_Quarter__c, 2))
 left join [PureDW_SFDC_staging].[dbo].[OpportunitySplitType] SplitType on OpptSplit.SplitTypeId = SplitType.Id
 left join #TempCov on #TempCov.OpportunityId = Oppt.Id
 left join #OpptHist on #OpptHist.OpportunityId = Oppt.Id
@@ -217,7 +256,7 @@ and OpptSplit.IsDeleted = 'False'
 
 ) b1
 left join (Select EmployeeID, [Period], cast(Quota as decimal(18,2)) Quota from [SalesOps_DM].[dbo].[SE_Org_Quota] where Period in ('1H', '2H')) SE_Half_Quota on
-		  (SE_Half_Quota.EmployeeID = b1.SE_Oppt_Owner_EmployeeID and SE_Half_Quota.[Period] = b1.Half_Year) 
+		  (SE_Half_Quota.EmployeeID = b1.SE_Oppt_Owner_EmployeeID_t and SE_Half_Quota.[Period] = b1.Half_Year) 
 )
 UNION
 (
@@ -262,29 +301,19 @@ Select    Oppt.Id
 	, FA_AE.Territory_ID__c Acct_Exec_Territory_ID
 
 	/* System Engineer on an opportunity */	
-/*
+    /*
 	, SE.Name SE_Oppt_Owner
 	, SE.Id SE_Oppt_Owner_SFDC_UserID
 	, SE.EmployeeNumber SE_Oppt_Owner_EmployeeID
 	, SE.IsActive SE_Oppt_Owner_ID_IsActive
-*/
+    */
 	, FA_SE.Name SE_Oppt_Owner --FlashArray SE
 	, FA_SE.Id SE_Oppt_Owner_SFDC_UserID
-	, FA_SE.EmployeeNumber SE_Oppt_Owner_EmployeeID
+	, FA_SE.EmployeeNumber SE_Oppt_Owner_EmployeeID_t
 	, FA_SE.IsActive SE_Oppt_Owner_ID_IsActive
 	, cast(SE_quota.Quota as decimal(15,2)) Quota
 
 	, cast(SE_Annual_Quota.Quota as decimal(15,2)) SE_Annual_Quota
-
-	, Dist_Quota.Territory_ID District_ID
-	, Dist_Quota.District District
---	, Dist_Quota.[Quarter] District_Qtr
-	, cast(Dist_Quota.Quota as decimal(15,2)) District_Qtrly_Quota
-
-	, Region_Quota.Territory_ID Region_ID
-	, Region_Quota.Region Region
---	, Region_Quota.[Quarter] Region_Qtr
-	, cast(Region_Quota.Quota as decimal(15,2)) Region_Qtrly_Quota
 
 	, Case when Assign_SE.SE is null then '' else Assign_SE.SE end [SE assigned to Territory]
 	, Assign_SE.SE_EmployeeID Assigned_SE_EmployeeID
@@ -322,6 +351,7 @@ Select    Oppt.Id
 
 	, Oppt.ForecastCategoryName ForecastCategory
 	, Oppt.StageName Stage
+	  
 	, cast(Oppt.CloseDate as Date) "Close Date"
 	, convert(date, oppt.CreatedDate) CreatedDate
 	
@@ -332,22 +362,6 @@ Select    Oppt.Id
 	, #OpptHist.StageName [Previous Stage]
 	, convert(date, #OpptHist.CloseDate) [Previous CloseDate]
 
-	, CASE When Oppt.ForecastCategory = #OpptHist.ForecastCategory Then 'N' Else 'Y' End ForecastCategory_changed
-	, CASE When oppt.StageName = #OpptHist.StageName Then 'N' Else 'Y' END Stage_changed
-	, CASE When oppt.CloseDate = #OpptHist.CloseDate Then 'N' Else 'Y' END Date_changed
-	, Case When (oppt.Amount is null) and (#OpptHist.Amount is null) then 'N'
-		   When (oppt.Amount is null) and (#OpptHist.Amount is not null) then 'Y'
-		   When (oppt.Amount is not null) and (#OpptHist.Amount is null) then 'Y'
-		   When oppt.Amount - #OpptHist.Amount = 0 Then 'N' Else 'Y' 
-	  End Amt_changed
-	, Case when oppt.CreatedDate >= (getdate()-7) then 'New'
-			 when (oppt.CreatedDate < (getdate()-7)) and (oppt.StageName != #OpptHist.StageName or oppt.CloseDate != #OpptHist.CloseDate) then 'Updated'
-			 when (oppt.CreatedDate < (getdate()-7)) and (oppt.Amount is not null and #OpptHist.Amount is null) then 'Updated'
-			 when (oppt.CreatedDate < (getdate()-7)) and (oppt.Amount is null and #OpptHist.Amount is not null) then 'Updated'
-			 when (oppt.CreatedDate < (getdate()-7)) and (oppt.Amount is not null and #OpptHist.Amount is not null and oppt.Converted_Amount_USD__c-#OpptHist.Amount != 0) then 'Updated'
-			 else 'No Change'
-	  end Change_Since_Snapshot
-
 from [PureDW_SFDC_staging].[dbo].[Opportunity] Oppt
 left join [PureDW_SFDC_staging].[dbo].RecordType RecType on RecType.Id = Oppt.RecordTypeId
 left join [PureDW_SFDC_staging].[dbo].[User] AE on OwnerId = AE.Id
@@ -357,10 +371,7 @@ left join [PureDW_SFDC_Staging].[dbo].[User] FA_SE on FA_SE.Id = Oppt.Flash_Arra
 left join [SalesOps_DM].[dbo].[Coverage_assignment_byTerritory] Assign_SE on Assign_SE.Territory_ID = FA_AE.Territory_ID__c
 left join [SalesOps_DM].[dbo].[SE_Org_Quota] SE_Quota on (SE_Quota.EmployeeID = FA_SE.EmployeeNumber and SE_Quota.[Period] = left(oppt.Close_Quarter__c, 2))
 left join (Select EmployeeID, cast(Quota as decimal(18,2)) Quota from [SalesOps_DM].[dbo].[SE_Org_Quota] where Period = 'FY') 
-			SE_Annual_Quota on (SE_Annual_Quota.EmployeeID = FA_SE.EmployeeNumber) -- Need Annual Quota
-left join [SalesOps_DM].[dbo].[Territory_Quota] Dist_Quota on (Dist_Quota.Territory_ID = Left(AE.Territory_ID__c, 18) and Dist_Quota.Quarter = left(oppt.Close_Quarter__c, 2))
-left join [SalesOps_DM].[dbo].[Territory_Quota] Region_Quota on (Region_Quota.Territory_ID = Left(AE.Territory_ID__c, 14) and Region_Quota.Quarter = left(oppt.Close_Quarter__c, 2))
-
+			SE_Annual_Quota on (SE_Annual_Quota.EmployeeID = FA_SE.EmployeeNumber)
 left join [PureDW_SFDC_staging].[dbo].[OpportunitySplit] OpptSplit on Oppt.Id = OpptSplit.OpportunityId
 left join [PureDW_SFDC_staging].[dbo].[User] OpptSplitUr on OpptSplitUr.Id = OpptSplit.SplitOwnerId
 left join [PureDW_SFDC_staging].[dbo].[OpportunitySplitType] SplitType on OpptSplit.SplitTypeId = SplitType.Id
@@ -374,11 +385,12 @@ and (Oppt.Flash_Array_AE1__c is not Null or Oppt.Flash_Array_SE1__c is not Null)
 
 ) b2
 left join (Select EmployeeID, [Period], cast(Quota as decimal(18,2)) Quota from [SalesOps_DM].[dbo].[SE_Org_Quota] where Period in ('1H', '2H')) SE_Half_Quota2 on
-		  (SE_Half_Quota2.EmployeeID = b2.SE_Oppt_Owner_EmployeeID and SE_Half_Quota2.[Period] = b2.Half_Year)
+		  (SE_Half_Quota2.EmployeeID = b2.SE_Oppt_Owner_EmployeeID_t and SE_Half_Quota2.[Period] = b2.Half_Year)
 )
 ) a
 --where Sub_Division like 'ISO%'
-where id like '0060z00001zRtXxAAK%'
+--where a.SE_Oppt_Owner = 'Felipe Bedulli'
+where id like '0060z000020VgHlAAK%'
 
 --where a.Id in ('0060z00001yoY1JAAU', '0060z00001yR9qbAAC') 'Arian Bexheti','Dean Brady',
 --where a.SE_Oppt_Owner in ( 'Joe Mazur')

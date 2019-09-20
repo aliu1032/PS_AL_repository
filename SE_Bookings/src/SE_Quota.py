@@ -217,7 +217,7 @@ Coverage_assignment_W.to_sql('Coverage_assignment_byTerritory', con=conn_str, if
 
 # reading from Anaplan data dump
 #quota_master[(quota_master.Resource_Group.isin(['SE','SEM','SE Director','SE AVP']))]
-SE_quota_W = quota_master[quota_master.Job_Family == 'Systems Engineering']\
+SE_quota_W = quota_master[(quota_master.Job_Family == 'Systems Engineering') | (quota_master.Job_Family == 'System Engineering')]\
              [['Name','Territory_IDs','Year', 'Resource_Group', 'EmployeeID', 'SFDC_UserID', 'Email',
                'M1_Theater','M1_Super_Region','M1_Region','M1_District','M1_Segment', 
                'M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned']]
@@ -288,9 +288,10 @@ SE_quota_L.to_sql('SE_Org_Quota', con=conn_str1, if_exists='replace', schema="db
 # SE covers 1 or multiple Territory IDs, thus I have loop using the L view
 #------------------------------------------------------------------------------ 
 #
-# Step 1: Find Manager names of who has SEs reporting, pull the Sub_Divisions of the reporting SEs
+# Initiate a Dataframe
 SE_SubDivision_Permission = pd.DataFrame(columns = ['Name','Email','SFDC_UserID','Resource_Group','SFDC_Sub_Division','Manager'])
 
+# Step 1: Find Manager names of who has SEs reporting, pull the Sub_Divisions of the reporting SEs
 # find the 1st level Manager's name of who have SE reporting to 
 Manager_of_SE = Coverage_assignment_L[Coverage_assignment_L.Resource_Group=='SE']['Manager']
 Manager_of_SE = list(dict.fromkeys(Manager_of_SE))
@@ -300,7 +301,7 @@ Manager_of_SE = [x for x in Manager_of_SE if ((str(x) != 'nan') & (str(x) != 'Na
 ## Chris Farmand / Euguen someone are inside sales. and the territory is a direct sales. different from central where the inside sales is overlay
 
 for i in Manager_of_SE:
-    # find the sub-divisions of reporting SE and SE in Territory of (Account Quotas, FlashBlade, Direct Sales                 
+    # find the sub-divisions of reporting SE and SE in Territory of (Account Quotas, FlashBlade, Direct Sales, Other Overlay)                
     Sub_Division_List = pd.DataFrame(list(dict.fromkeys(Coverage_assignment_L[(Coverage_assignment_L.Manager == i) &
                                                                               (Coverage_assignment_L.Hierarchy.isin(['Account Quotas','FlashBlade','Direct Sales', 'Other Overlay']))]\
                                                                               ['SFDC_Sub_Division'])), columns=['SFDC_Sub_Division'])
@@ -325,13 +326,10 @@ for i in mgr_level:
     
     # find the sub-divisions of the SEM reporting to the SE Director                 
     for j in mgr_names: 
-    #mgr_names[:1]:        
         Sub_Division_List = pd.DataFrame(list(dict.fromkeys(SE_SubDivision_Permission[SE_SubDivision_Permission.Manager == j]['SFDC_Sub_Division'])), columns=['SFDC_Sub_Division'])
         if len(Sub_Division_List) == 0:
             print('bad') # need to add the code when the new manager has no reporting #I am too tired Mar 1, 2019
-        
-        
-        # The SE Directors are reporting to Nathan Hall (interim for Zack Murphy)  who do have territory/quota assignment
+               
         header = Quota_assignment_W.loc[Quota_assignment_W.Name==j,['Name','Email','SFDC_UserID','Resource_Group','Manager']]
         '''
         if j == "Nathan Hall" :
@@ -353,8 +351,11 @@ SE_SubDivision_Permission.drop_duplicates(subset=['SFDC_UserID', 'SFDC_Sub_Divis
 extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
                 'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Nathan Hall']],
                 'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                #'Dustin Vo' :['dustin@purestorage.com','SE Support','Manager', ['Nathan Hall']]
-                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']]
+                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+                'Alex Cisneros' :['acisneros@purestorage.com','Theater Ops','Theater Ops', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+                'Julie Rosenberg' :['julie@purestorage.com','SE Specialist','SE Specialist', ['Michael Richardson']],   #adding for CTM
+                'Markus Wolf' :['markus@purestorage.com','SE Specialist','SE Specialist', ['Carl McQuillan']], ## adding for CTM
+                'James Slater' :['jslater@purestorage.com','SE Specialist','SE Specialist', ['Mike Roan']] ## adding for CTM
               }
 
 for i in list(extra_users.keys()) :
@@ -385,102 +386,6 @@ for i in range(0,len(to_sql_type.Columns)):
     data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
 
 SE_SubDivision_Permission.to_sql('SE_SubDivision_Permission', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
-
-
-#------------------------------------------------------------------------------ 
-# Step 1: Find the SEs reporting to a SEM, pull the Divisions the SEM have access to
-#------------------------------------------------------------------------------ 
-SE_District_Permission = pd.DataFrame(columns = ['Name','Email','SFDC_UserID','Resource_Group','District','Manager'])
-
-# find the Manager's name of who have SE reporting to 
-Manager_of_SE = Coverage_assignment_L[Coverage_assignment_L.Resource_Group=='SE']['Manager']
-Manager_of_SE = list(dict.fromkeys(Manager_of_SE))
-Manager_of_SE = [x for x in Manager_of_SE if ((str(x) != 'nan') & (str(x) != 'NaN'))]
-
-for i in Manager_of_SE:
-    # find the District of reporting SE                 
-    District_List = pd.DataFrame(list(dict.fromkeys(Coverage_assignment_L[(Coverage_assignment_L.Manager == i) &
-                                                                          (Coverage_assignment_L.Hierarchy.isin(['Account Quotas','FlashBlade','Direct Sales', 'Other Overlay']))] \
-                                                                          ['District'])), columns=['District'])
-    District_List.dropna(inplace=True)
-    if len(District_List) > 0:   # for the SE Territory is not assigned a Sub_Division value
-        temp = pd.concat([Quota_assignment_W.loc[Quota_assignment_W.Name==i,['Name','Email','SFDC_UserID','Resource_Group','Manager']]]*(len(District_List)), ignore_index=True)
-        temp = pd.concat([temp, District_List], axis=1)      
-        SE_District_Permission = SE_District_Permission.append(temp, sort=False)
-
-SE_District_Permission = SE_District_Permission[(SE_District_Permission.District!=" ") & ~(SE_District_Permission.District.isna())]
-
-# Step2: construct the division list for SE Director and SE AVP
-mgr_level = ['SEM','SE Director']
-for i in mgr_level:
-    # find the Manager's of the SEM and SE Director
-    mgr_names = SE_District_Permission[ 
-                                (SE_District_Permission.Resource_Group==i) &
-                                (SE_District_Permission.Name.str.match('^[^SR-]*')) &
-                                (SE_District_Permission.Name.str.match('^[^\d]*'))
-                                ]['Manager']
-    mgr_names = list(dict.fromkeys(mgr_names)) # create a dictionary from the list items as keys, then pull the keys from the dictionary
-    
-    # find the sub-divisions of the SEM reporting to the SE Director                 
-    for j in mgr_names:        
-        District_List = pd.DataFrame(list(dict.fromkeys(SE_District_Permission[SE_District_Permission.Manager == j]['District'])), columns=['District'])
-        if len(District_List) == 0:
-            print('bad') # need to add the code when the new manager has no reporting #I am too tired Mar 1, 2019
-        
-        
-        # The SE Directors are reporting to Nathan Hall (interim for Zack Murphy)  who do have territory/quota assignment
-        header = Quota_assignment_W.loc[Quota_assignment_W.Name==j,['Name','Email','SFDC_UserID','Resource_Group','Manager']]
-        '''
-        if j == "Nathan Hall" :
-            header = pd.DataFrame([{'Name':'Nathan Hall', 'Email':'nhall@purestorage.com', 'SFDC_UserID':'0050z000006lcFnAAI', 'Resource_Group':'SE AVP', 'Manager':'Alex McMullan'}])
-        '''    
-        temp = pd.concat([header]*(len(District_List)), ignore_index=True)
-        temp = pd.concat([temp, District_List], axis=1)
-        SE_District_Permission = SE_District_Permission.append(temp, sort=False)
-        
-    SE_District_Permission = SE_District_Permission[(SE_District_Permission.District!=" ") & ~(SE_District_Permission.District.isna())]
-
-#remove the duplicates. They are there when a for example SE Director has SE and SEM reporting him.
-SE_District_Permission.drop_duplicates(subset=['SFDC_UserID', 'District'], keep='first', inplace=True)
-
-
-# Step 3: adding exception cases: Users in the supporting organization and needed access
-# dictionary values: email, name, resource group, manager, copy from who
-extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Nathan Hall']],
-                'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                #'Dustin Vo' :['dustin@purestorage.com','SE Support','Manager', ['Nathan Hall']]
-                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']]
-
-              }
-
-for i in list(extra_users.keys()) :
-    for j in range(0, len(extra_users[i][3])):
-        temp = SE_District_Permission[SE_District_Permission.Name == extra_users[i][3][j]].copy()
-        temp.Name = i
-        temp.Email = extra_users[i][0]
-        temp.Resource_Group = extra_users[i][1]
-        temp.Manager = extra_users[i][2]
-    
-        SE_District_Permission = SE_District_Permission.append(temp)
-                
-SE_District_Permission.rename(columns={'Email':'User'}, inplace=True)
-#SE_District_Permission.to_csv(cfg.output_folder+'SE_District_Permission.txt', sep="|", index=False)
-
-# get the unique district values with region, super-region, theater
-temp_master = pd.pivot_table(data=TerritoryID_Master, index=['District','Region','Super_Region','Theater'], values = ['Territory'], aggfunc='count').rename(columns={'Territory':'No. of Territory'})
-temp_master.reset_index(inplace=True)
-
-SE_District_Permission = pd.merge(SE_District_Permission, temp_master, how='left', left_on='District', right_on='District')
-
-to_sql_type = db_columns_types[db_columns_types.DB_TableName=='SE_District_Permission']
-
-data_type={}
-for i in range(0,len(to_sql_type.Columns)):
-    data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
-
-SE_District_Permission.to_sql('SE_District_Permission', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
-
 
 ##########################################################################################
 # Step 1: Find Manager names of who has SEs reporting, pull the Sub_Divisions of the reporting SEs
@@ -544,8 +449,11 @@ SE_Subordinate_Permission.drop_duplicates(subset=['SFDC_UserID', 'Subordinate'],
 extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
                 'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
                 'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                #'Dustin Vo' :['dustin@purestorage.com','SE Support','Manager', ['Nathan Hall']]
-                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']]
+                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+                'Alex Cisneros' :['acisneros@purestorage.com','Theater Ops','Theater Ops', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+                'Julie Rosenberg' :['julie@purestorage.com','SE Specialist','SE Specialist', ['Michael Richardson']],   #adding for CTM
+                'Markus Wolf' :['markus@purestorage.com','SE Specialist','SE Specialist', ['Carl McQuillan']], ## adding for CTM
+                'James Slater' :['jslater@purestorage.com','SE Specialist','SE Specialist', ['Mike Roan']] ## adding for CTM
               }
 
 for i in list(extra_users.keys()) :
@@ -574,16 +482,23 @@ temp_master.rename(columns = {'M1_Theater':'Theater',
 
 SE_Subordinate_Permission = pd.merge(SE_Subordinate_Permission[['Name', 'User', 'SFDC_UserID', 'Resource_Group', 'Subordinate']], temp_master, how='left', on='Subordinate').sort_values(by = ['Name', 'Subordinate'])
 
-'''
-# get the unique district values with region, super-region, theater
-temp_master = pd.pivot_table(data=TerritoryID_Master, index=['SFDC_Sub_Division','SFDC_Division','SFDC_Theater'], values = ['Territory'], aggfunc='count').rename(columns={'Territory':'No. of Territory'})
-#temp_master = pd.pivot_table(data=TerritoryID_Master, index=['District','Region','Super_Region','Theater'], values = ['Territory'], aggfunc='count').rename(columns={'Territory':'No. of Territory'})
-temp_master.reset_index(inplace=True)
-temp_master.rename(columns={'SFDC_Sub_Division':'Sub_Division','SFDC_Division':'Division','SFDC_Theater':'Theater'}, inplace=True)
+# adding 1 row for Lee because he own a territory
+exception_user = {'Name' : 'Lee Morris',
+                  'User' : 'lmorris@purestorage.com',
+                  'SFDC_UserID' : '0050z000007GG3uAAG',
+                  'Resource_Group' : 'SE',
+                  'Subordinate' : 'Lee Morris',
+                  'EmployeeID' : '103956',
+                  'Subordinate_SFDC_UserId' : '0050z000007GG3uAAG',
+                  'Subordinate_Resource_Group' : 'SE',
+                  'Territory_IDs' : 'WW_EMA_ECR_GBR_UPS_002',
+                  'Theater' : 'EMEA', 
+                  'Super_Region' : 'EMEA Core Markets', 
+                  'Region' : 'United Kingdom', 
+                  'District' : 'UK Public Sector District',
+                  'Segment' : 'Federal'}
 
-SE_SubDivision_Permission = pd.merge(SE_SubDivision_Permission, temp_master, how='left', left_on='Sub_Division', right_on='Sub_Division')
-'''
-#SE_org_coverage.to_csv(cfg.output_folder+'SE_SubDivision_Permission.txt', sep="|", index=False)
+SE_Subordinate_Permission = SE_Subordinate_Permission.append(exception_user, ignore_index = True)
 
 to_sql_type = db_columns_types[db_columns_types.DB_TableName=='SE_Subordinate_Permission']
 
@@ -593,9 +508,181 @@ for i in range(0,len(to_sql_type.Columns)):
     
 SE_Subordinate_Permission.to_sql('SE_Subordinate_Permission', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
 
+#----------------------------------------------------------------------------------------------------- 
+# Based on a User assigned Territory, derive the list of Geo/Region/District Territory ID(s) which
+# the user has access to.
+# A user is given visibility to Geo/Region/District that are under the assigned Territory
+#------------------------------------------------------------------------------------------------------
+
+Users_need_access = list(dict.fromkeys(Coverage_assignment_L[Coverage_assignment_L.Resource_Group.isin(['SE GVP', 'SE AVP', 'SE Director', 'SA Director', 'SA', 'CTM', 'PSE'])]['Name']))
+
+SE_District_Permission = pd.DataFrame(columns = ['Name','Email','SFDC_UserID','Resource_Group','Territory_ID','Manager'])
+
+for i in Users_need_access:
+    User_own_coverage = list(dict.fromkeys(Coverage_assignment_L[Coverage_assignment_L.Name==i]['Territory_ID']))
+    
+    for j in User_own_coverage:
+        # find the Territory Ids rolls under the user's coverage id
+        Coverage_List = pd.DataFrame(list(TerritoryID_Master[TerritoryID_Master.Territory_ID.str.startswith(j) & (TerritoryID_Master.Territory_ID.str.len() <= 18)]['Territory_ID'])
+                                    , columns=['Territory_ID'])
+
+        if len(Coverage_List) == 0 :
+            for x in User_own_coverage:
+                Coverage_List = Coverage_List.append({'Territory_ID':x[:18]}, ignore_index=True)
+            
+        temp = pd.concat([Quota_assignment_W.loc[Quota_assignment_W.Name==i,['Name','Email','SFDC_UserID','Resource_Group','Manager']]]*(len(Coverage_List)), ignore_index=True)
+        temp = pd.concat([temp, Coverage_List], axis=1)      
+        SE_District_Permission = SE_District_Permission.append(temp, sort=False)
+            
+SE_District_Permission.drop_duplicates(subset=['SFDC_UserID', 'Territory_ID'], keep='first', inplace=True)
+
+# {Name : [User email, Resource_Group,Manager], [Names to copy]}
+extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Steve Gordon', ['Shawn Rosemarin']],
+                'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Andrew LeSage', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Gary Kortye', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+                'Alex Cisneros' :['acisneros@purestorage.com','Theater Ops','Ed Ho', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']]
+              }
+
+for i in list(extra_users.keys()) :
+    for j in range(0, len(extra_users[i][3])):
+        temp = SE_District_Permission[SE_District_Permission.Name == extra_users[i][3][j]].copy()
+        temp.Name = i
+        temp.Email = extra_users[i][0]
+        temp.Resource_Group = extra_users[i][1]
+        temp.Manager = extra_users[i][2]
+    
+        SE_District_Permission = SE_District_Permission.append(temp)
+                
+SE_District_Permission.rename(columns={'Email':'User'}, inplace=True)
+#SE_District_Permission.to_csv(cfg.output_folder+'SE_District_Permission.txt', sep="|", index=False)
+
+
+sel_col = ['Short_Description', 'Territory_ID', 'Level', 'Hierarchy', 
+           'Theater', 'Super_Region', 'Region', 'District']
+SE_District_Permission = pd.merge(SE_District_Permission, TerritoryID_Master[sel_col], how='left', left_on='Territory_ID', right_on='Territory_ID')
+
+to_sql_type = db_columns_types[db_columns_types.DB_TableName=='SE_District_Permission']
+
+data_type={}
+for i in range(0,len(to_sql_type.Columns)):
+    data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
+
+SE_District_Permission.to_sql('SE_District_Permission', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
 
 
 print('I am so done')
+
+'''
+SE_District_Permission = pd.DataFrame(columns = ['Name','Email','SFDC_UserID','Resource_Group','Territory_ID','Manager'])
+## 'District'
+
+# find the Manager's name of who have SEM reporting to 
+Manager_of_SEM = Coverage_assignment_L[Coverage_assignment_L.Resource_Group=='SEM']['Manager']
+Manager_of_SEM = list(dict.fromkeys(Manager_of_SE))
+Manager_of_SEM = [x for x in Manager_of_SE if ((str(x) != 'nan') & (str(x) != 'NaN'))]
+
+for i in Manager_of_SEM:
+    # find the District of reporting SE  
+                  
+    District_List = pd.DataFrame(list(dict.fromkeys(Coverage_assignment_L[(Coverage_assignment_L.Manager == i) &
+                                                                          (Coverage_assignment_L.Hierarchy.isin(['Account Quotas','FlashBlade','Direct Sales', 'Other Overlay']))] \
+                                                                          ['District'])), columns=['District'])
+    
+    District_List = pd.DataFrame(list(dict.fromkeys(Coverage_assignment_L[(Coverage_assignment_L.Manager == i) &
+                                                                          (Coverage_assignment_L.Hierarchy.isin(['Account Quotas','FlashBlade','Direct Sales', 'Other Overlay']))] \
+                                                                          ['Territory_ID'])), columns=['Territory_ID'])
+
+    District_List.dropna(inplace=True)
+    if len(District_List) > 0:   # for the SE Territory is not assigned a Sub_Division value
+        temp = pd.concat([Quota_assignment_W.loc[Quota_assignment_W.Name==i,['Name','Email','SFDC_UserID','Resource_Group','Manager']]]*(len(District_List)), ignore_index=True)
+        temp = pd.concat([temp, District_List], axis=1)      
+        SE_District_Permission = SE_District_Permission.append(temp, sort=False)
+
+SE_District_Permission = SE_District_Permission[(SE_District_Permission.Territory_ID!=" ") & ~(SE_District_Permission.Territory_ID.isna())]
+SE_District_Permission = SE_District_Permission[(SE_District_Permission.Territory_ID.str.len()<=18)]
+
+# insert Manager of SE's own coverage
+for i in Manager_of_SEM:
+    temp = Coverage_assignment_L[Coverage_assignment_L.Name == i][['Name','Email','SFDC_UserID','Resource_Group','Manager','Territory_ID']]
+    SE_District_Permission = SE_District_Permission.append(temp, sort=False)
+
+#remove the duplicates. They are there when a for example SE Director has SE and SEM reporting him.
+SE_District_Permission.drop_duplicates(subset=['SFDC_UserID', 'Territory_ID'], keep='first', inplace=True)
+
+
+# Step2: construct the division list for SE Director and SE AVP
+mgr_level = ['SE Director']
+for i in mgr_level:
+    # find the Manager's of the SEM and SE Director
+    mgr_names = SE_District_Permission[ 
+                                (SE_District_Permission.Resource_Group==i) &
+                                (SE_District_Permission.Name.str.match('^[^SR-]*')) &
+                                (SE_District_Permission.Name.str.match('^[^\d]*'))
+                                ]['Manager']
+    mgr_names = list(dict.fromkeys(mgr_names)) # create a dictionary from the list items as keys, then pull the keys from the dictionary
+    
+    # find the sub-divisions of the SEM reporting to the SE Director                 
+    for j in mgr_names:        
+        District_List = pd.DataFrame(list(dict.fromkeys(SE_District_Permission[SE_District_Permission.Manager == j]['Territory_ID'])), columns=['Territory_ID'])
+        if len(District_List) == 0:
+            print('bad') # need to add the code when the new manager has no reporting #I am too tired Mar 1, 2019
+        
+        
+        # The SE Directors are reporting to Nathan Hall (interim for Zack Murphy)  who do have territory/quota assignment
+        header = Quota_assignment_W.loc[Quota_assignment_W.Name==j,['Name','Email','SFDC_UserID','Resource_Group','Manager']]
+        temp = pd.concat([header]*(len(District_List)), ignore_index=True)
+        temp = pd.concat([temp, District_List], axis=1)
+        SE_District_Permission = SE_District_Permission.append(temp, sort=False)
+        
+    SE_District_Permission = SE_District_Permission[(SE_District_Permission.District!=" ") & ~(SE_District_Permission.District.isna())]
+
+#remove the duplicates. They are there when a for example SE Director has SE and SEM reporting him.
+SE_District_Permission.drop_duplicates(subset=['SFDC_UserID', 'Territory_ID'], keep='first', inplace=True)
+
+# insert Manager's own coverage
+for i in mgr_names:
+    temp = Coverage_assignment_L[Coverage_assignment_L.Name == i][['Name','Email','SFDC_UserID','Resource_Group','Manager','Territory_ID']]
+    SE_District_Permission = SE_District_Permission.append(temp, sort=False)
+
+# Step 3: adding exception cases: Users in the supporting organization and needed access
+# dictionary values: email, name, resource group, manager, copy from who
+extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+                'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Nathan Hall']],
+                'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+                #'Dustin Vo' :['dustin@purestorage.com','SE Support','Manager', ['Nathan Hall']]
+                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']]
+
+              }
+
+for i in list(extra_users.keys()) :
+    for j in range(0, len(extra_users[i][3])):
+        temp = SE_District_Permission[SE_District_Permission.Name == extra_users[i][3][j]].copy()
+        temp.Name = i
+        temp.Email = extra_users[i][0]
+        temp.Resource_Group = extra_users[i][1]
+        temp.Manager = extra_users[i][2]
+    
+        SE_District_Permission = SE_District_Permission.append(temp)
+                
+SE_District_Permission.rename(columns={'Email':'User'}, inplace=True)
+#SE_District_Permission.to_csv(cfg.output_folder+'SE_District_Permission.txt', sep="|", index=False)
+
+# get the unique district values with region, super-region, theater
+temp_master = pd.pivot_table(data=TerritoryID_Master, index=['District','Region','Super_Region','Theater'], values = ['Territory'], aggfunc='count').rename(columns={'Territory':'No. of Territory'})
+temp_master.reset_index(inplace=True)
+
+SE_District_Permission = pd.merge(SE_District_Permission, temp_master, how='left', left_on='District', right_on='District')
+
+to_sql_type = db_columns_types[db_columns_types.DB_TableName=='SE_District_Permission']
+
+data_type={}
+for i in range(0,len(to_sql_type.Columns)):
+    data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
+
+SE_District_Permission.to_sql('SE_District_Permission', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+'''
+
+
              
 ''' notes for multi level column header
 #Territory_assignment[Territory_assignment.index.get_level_values('Territory_ID') == 'WW_AMS_COM_CEN_IWC_006']
