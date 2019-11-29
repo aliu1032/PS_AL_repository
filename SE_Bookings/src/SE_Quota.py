@@ -12,14 +12,13 @@ Created on Jan 11, 2019
 
 import project_config as cfg
 import pandas as pd
+import pyodbc
 from sqlalchemy import create_engine
 from sqlalchemy import types as sqlalchemy_types
-import pyodbc
-
 
 server = 'ALIU-X1'
 database = 'ALIU_DB1'
-conn_str = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') #work
+conn_str = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') 
 
 '''
 cnxn = pyodbc.connect('DSN=ALIU-X1; Trust_Connection = yes',DRIVER='{ODBC Driver 13 for SQL Server}', SERVER='ALIU-X1', Database='ALIU_DB1')
@@ -61,7 +60,7 @@ quota_master = get_anaplan_quota(1)
 
 # Read the Quota assignment from Anaplan 
 # Quota_assignement_W is by Name
-Quota_assignment_W = quota_master[['Name', 'Title','Resource_Group','HC_Status', 'EmployeeID','SFDC_UserID', 'Email','Manager','Territory_IDs']]
+Quota_assignment_W = quota_master[['Name', 'Title','Resource_Group','HC_Status', 'EmployeeID','SFDC_UserID', 'Email','Manager','Territory_IDs', 'Segments']]
 Quota_assignment_W.Territory_IDs.fillna("", inplace=True)
 len_header = len(Quota_assignment_W.columns)
 
@@ -74,7 +73,7 @@ for i in Quota_assignment_col:
     Quota_assignment_W[i] = Quota_assignment_W[i].str.strip()
 
 # Un-pivot the Territory IDs
-Quota_assignment_L = pd.melt(Quota_assignment_W, id_vars=['Name','Title','Resource_Group', 'HC_Status', 'EmployeeID','SFDC_UserID', 'Email', 'Manager','Territory_IDs'], value_vars = Quota_assignment_col,
+Quota_assignment_L = pd.melt(Quota_assignment_W, id_vars=['Name','Title','Resource_Group', 'HC_Status', 'EmployeeID','SFDC_UserID', 'Email', 'Manager','Territory_IDs','Segments'], value_vars = Quota_assignment_col,
                 var_name = 'Quota_assignment', value_name = 'Territory_ID')
 Quota_assignment_L = Quota_assignment_L[~(Quota_assignment_L.Territory_ID.isnull())] #clean the null data
 
@@ -91,8 +90,27 @@ data_type={}
 for i in range(0,len(to_sql_type.Columns)):
     data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
 
-Quota_assignment_L.to_sql('Territory_assignment_byName', con=conn_str, if_exists='replace', schema="dbo", index=False)
-    
+Quota_assignment_L.Quota_assignment=Quota_assignment_L.Quota_assignment.astype('float')
+Quota_assignment_L[['Name', 'Title', 'Resource_Group', 'HC_Status', 'EmployeeID',
+                    'SFDC_UserID', 'Email', 'Manager', 'Territory_IDs', 'Segments',
+                    'Territory_ID', 'Short_Description', 'Level', 'Segment', 'Type',
+                    'Hierarchy', 'Theater', 'Super_Region', 'Region', 'District',
+                    'Territory', 'SFDC_Theater', 'SFDC_Division', 'SFDC_Sub_Division']] = Quota_assignment_L[['Name', 'Title', 'Resource_Group', 'HC_Status', 'EmployeeID',
+                    'SFDC_UserID', 'Email', 'Manager', 'Territory_IDs', 'Segments',
+                    'Territory_ID', 'Short_Description', 'Level', 'Segment', 'Type',
+                    'Hierarchy', 'Theater', 'Super_Region', 'Region', 'District',
+                    'Territory', 'SFDC_Theater', 'SFDC_Division', 'SFDC_Sub_Division']].fillna(value='')
+''' #check length                     
+for i in ['Name', 'Title', 'Resource_Group', 'HC_Status', 'EmployeeID','SFDC_UserID', 'Email', 'Manager', 'Territory_IDs', 'Segments', 
+          'Territory_ID', 'Short_Description','Level','Segment', 'Type', 'Hierarchy', 'Theater', 'Super_Region', 'Region', 'District',
+          'Territory', 'SFDC_Theater', 'SFDC_Division', 'SFDC_Sub_Division']:
+    j = Quota_assignment_L[i].map(lambda x: len(x)).max()
+    print (i + '  : ' + str(j))
+'''    
+#Quota_assignment_L.loc[Quota_assignment_L.Manager=='Dean Brady','Region'] = 'ISR Roll-up - AMER'
+                   
+Quota_assignment_L.to_sql('Territory_assignment_byName', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+
 #------------------------------------------------------------------------------ 
 # Theoretically,
 # A SE is assigned to territories; a SEM is assigned to districts
@@ -111,7 +129,7 @@ Quota_assignment_L.to_sql('Territory_assignment_byName', con=conn_str, if_exists
 # SR-10115_SE Mgmt_Canada SEM : replace 'WW_AMS_COM_CAD' with 'WW_AMS_COM_CAD_CAD; WW_AMS_COM_CAD_TOR'
 #------------------------------------------------------------------------------ 
 
-def expand_territory(input_series, expand_to_level):
+def expand_territory(input_series, expand_to_level, ISO):
     # input: a row in the source database, when passed in it is a series
     #print (type(input_series))
     #print (expand_to_level)
@@ -119,11 +137,27 @@ def expand_territory(input_series, expand_to_level):
     source_territory = input_series['Territory_ID']
     #print(source_territory)
     #print((input_series[header_col]))
-    row_count = len(TerritoryID_Master[(TerritoryID_Master.Level == expand_to_level) & (TerritoryID_Master.Territory_ID.str.startswith(source_territory))])
-    d1 = pd.DataFrame([input_series[header_col]]*row_count, columns = header_col)
-    d2 = pd.DataFrame(TerritoryID_Master[(TerritoryID_Master.Level == expand_to_level) & (TerritoryID_Master.Territory_ID.str.startswith(source_territory))],
-                      columns = TerritoryID_Master.columns)
-    output = pd.concat([d1.reset_index(),d2.reset_index()],axis=1)
+    if ISO:
+        print('ISO = True')
+        row_count = len(TerritoryID_Master[(TerritoryID_Master.Level == expand_to_level) &\
+                                           (TerritoryID_Master.Territory_ID.str.startswith(source_territory)) 
+                                           ])
+        d1 = pd.DataFrame([input_series[header_col]]*row_count, columns = header_col)
+        d2 = pd.DataFrame(TerritoryID_Master[(TerritoryID_Master.Level == expand_to_level) &\
+                                             (TerritoryID_Master.Territory_ID.str.startswith(source_territory))
+                                            ], columns = TerritoryID_Master.columns)
+        output = pd.concat([d1.reset_index(),d2.reset_index()],axis=1)
+    else:
+        row_count = len(TerritoryID_Master[(TerritoryID_Master.Level == expand_to_level) &\
+                                           (TerritoryID_Master.Territory_ID.str.startswith(source_territory)) &\
+                                           (~TerritoryID_Master.SFDC_Division.fillna('').str.startswith('ISO'))
+                                           ])
+        d1 = pd.DataFrame([input_series[header_col]]*row_count, columns = header_col)
+        d2 = pd.DataFrame(TerritoryID_Master[(TerritoryID_Master.Level == expand_to_level) &\
+                                             (TerritoryID_Master.Territory_ID.str.startswith(source_territory)) &\
+                                             (~TerritoryID_Master.SFDC_Division.fillna('').str.startswith('ISO'))],
+                          columns = TerritoryID_Master.columns)
+        output = pd.concat([d1.reset_index(),d2.reset_index()],axis=1)
     return(output)
 
 # Initiate the Coverage assignment with the Quota assignment
@@ -134,25 +168,48 @@ No_assignment = Coverage_assignment_L[Coverage_assignment_L.Territory_ID.isna()]
 
 ### issue: computer cannot tell whether a SE is truly covering the entire district or put on a district during AE/SE ramp up period.
 # replace SE assignment for those who is not carrying a territory quota, resolve the region/district into territories
-temp = Coverage_assignment_L[(Coverage_assignment_L.Resource_Group == 'SE') & (Coverage_assignment_L.Level != 'Territory') & ~(Coverage_assignment_L.Level.isna())]
+temp = Coverage_assignment_L[(Coverage_assignment_L.Resource_Group == 'SE') & \
+                             (Coverage_assignment_L.Level != 'Territory') & \
+                             ~(Coverage_assignment_L.Level=='') &\
+                             ~(Coverage_assignment_L.Theater.str.startswith('ISR'))]                                                                                                                               #.isna())]
 
 temp2 = pd.DataFrame()
 for i in range(len(temp)):
     working_on_row = temp.index[i] 
-    temp2 = temp2.append(expand_territory(temp.iloc[i],'Territory'))
+    temp2 = temp2.append(expand_territory(temp.iloc[i],'Territory', False))
     Coverage_assignment_L.drop([working_on_row], axis='rows', inplace=True) ##
 
 extract_col = ['Name', 'Title', 'Resource_Group', 'HC_Status', 'EmployeeID', 'SFDC_UserID', 'Email', 'Manager', 'Territory_IDs', 'Quota_assignment']    
 Coverage_assignment_L = Coverage_assignment_L.append(temp2[extract_col + list(TerritoryID_Master.columns)], sort="False")
 
-temp = Coverage_assignment_L[(Coverage_assignment_L.Resource_Group == 'SEM') & (Coverage_assignment_L.Level != 'District') & ~(Coverage_assignment_L.Level.isna())]
+temp = Coverage_assignment_L[(Coverage_assignment_L.Resource_Group == 'SEM') & (Coverage_assignment_L.Level != 'District') & ~(Coverage_assignment_L.Level=='')]
 temp2 = pd.DataFrame()
 for i in range(len(temp)):
     working_on_row = temp.index[i] ##
-    temp2 = temp2.append(expand_territory(temp.iloc[i],'District'))
+    temp2 = temp2.append(expand_territory(temp.iloc[i],'District', False))
     Coverage_assignment_L.drop([working_on_row], axis='rows', inplace=True) ##
    
 Coverage_assignment_L = Coverage_assignment_L.append(temp2[extract_col + list(TerritoryID_Master.columns)], sort="False")
+
+''''''
+temp_ISO = Coverage_assignment_L[(Coverage_assignment_L.Resource_Group == 'SE') & \
+                                 (Coverage_assignment_L.Level != 'Territory') &\
+                                ~(Coverage_assignment_L.Level=='') &\
+                                (Coverage_assignment_L.Theater.str.startswith('ISR'))  ]
+
+
+temp2 = pd.DataFrame()
+for i in range(len(temp_ISO)):
+    working_on_row = temp_ISO.index[i] 
+    temp2 = temp2.append(expand_territory(temp_ISO.iloc[i],'Territory', True))
+    Coverage_assignment_L.drop([working_on_row], axis='rows', inplace=True) ##
+
+extract_col = ['Name', 'Title', 'Resource_Group', 'HC_Status', 'EmployeeID', 'SFDC_UserID', 'Email', 'Manager', 'Territory_IDs', 'Quota_assignment']    
+Coverage_assignment_L = Coverage_assignment_L.append(temp2[extract_col + list(TerritoryID_Master.columns)], sort="False")
+
+#temp = Coverage_assignment_L[(Coverage_assignment_L.Resource_Group == 'SEM') & (Coverage_assignment_L.Level != 'District') & ~(Coverage_assignment_L.Level=='')]
+
+                                                                                                                               #.isna())]
 
 # Write the Coverage Assignment to a text file
 #Coverage_assignment_L.to_csv(cfg.output_folder+'Coverage_Assignment_byName.txt', sep="|", index=False)
@@ -167,9 +224,10 @@ Coverage_assignment_L.to_sql('Coverage_assignment_byName', con=conn_str, if_exis
 ''''''
 
 # Make an output of Coverage_assignment by Territory
-Coverage_assignment_L.fillna(" ", inplace=True) 
-Coverage_assignment_W = pd.pivot_table(Coverage_assignment_L[['Name','Territory_ID','Resource_Group','EmployeeID','SFDC_UserID', 'Email', 'Manager']], \
+Coverage_assignment_W = pd.pivot_table(Coverage_assignment_L[~(Coverage_assignment_L.Resource_Group=='') & ~(Coverage_assignment_L.Territory_ID=='')]\
+                                       [['Name','Territory_ID','Resource_Group','EmployeeID','SFDC_UserID', 'Email', 'Manager']], \
                       index = 'Territory_ID', columns='Resource_Group', values=['Name','Email','EmployeeID','SFDC_UserID'], aggfunc=lambda x: ' | '.join(x))
+Coverage_assignment_L.fillna(" ", inplace=True)
 
 new_name=[]
 for i in Coverage_assignment_W.columns.levels[0]:
@@ -177,7 +235,7 @@ for i in Coverage_assignment_W.columns.levels[0]:
         new_name.append(j + " " + i)
 Coverage_assignment_W.columns = Coverage_assignment_W.columns.droplevel(0)
 Coverage_assignment_W.columns=new_name
-Coverage_assignment_W.drop(columns=['  Name','  Email','  EmployeeID','  SFDC_UserID'], inplace=True)
+#Coverage_assignment_W.drop(columns=[' Name',' Email',' EmployeeID',' SFDC_UserID'], inplace=True)  # dropping the users who is not tag to a resource group
 
 '''
 check_dup = SE_org_coverage.duplicated(subset=['Territory_ID', 'Name'])
@@ -201,8 +259,20 @@ to_sql_type = db_columns_types[db_columns_types.DB_TableName == 'Coverage_assign
 data_type={}
 for i in range(0,len(to_sql_type.Columns)):
     data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
+    
+Coverage_assignment_W.fillna('', inplace=True)   
+
+'''#check length                     
+for i in Coverage_assignment_W.columns:
+    j = Coverage_assignment_W[i].map(lambda x: len(x)).max()
+    print (i + '  : ' + str(j))    
+'''    
+
+#Coverage_assignment_W.replace([np.nan], None, inplace=True)
+#Coverage_assignment_W = Coverage_assignment_W.where(pd.notnull(Coverage_assignment_W),None)
 
 Coverage_assignment_W.to_sql('Coverage_assignment_byTerritory', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+
 
 #------------------------------------------------------------------------------ 
 # Read the individual quota information
@@ -219,8 +289,9 @@ Coverage_assignment_W.to_sql('Coverage_assignment_byTerritory', con=conn_str, if
 #quota_master[(quota_master.Resource_Group.isin(['SE','SEM','SE Director','SE AVP']))]
 SE_quota_W = quota_master[(quota_master.Job_Family == 'Systems Engineering') | (quota_master.Job_Family == 'System Engineering')]\
              [['Name','Territory_IDs','Year', 'Resource_Group', 'EmployeeID', 'SFDC_UserID', 'Email',
-               'M1_Theater','M1_Super_Region','M1_Region','M1_District','M1_Segment', 
+               'M1_Theater','M1_Super_Region','M1_Region','M1_District','Segments', 
                'M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned']]
+SE_quota_W.rename(columns = {'Segments' : 'M1_Segment'}, inplace =True)  ### need to check on Oct 7, 2019
 
 ## calculate the 1H, 2H and Annual quota
 SE_quota_W['1H'] = SE_quota_W['M1_Q1_Quota_Assigned'] + SE_quota_W['M1_Q2_Quota_Assigned']
@@ -348,10 +419,10 @@ SE_SubDivision_Permission.drop_duplicates(subset=['SFDC_UserID', 'SFDC_Sub_Divis
 
 # Step 3: adding exception cases: Users in the supporting organization and needed access
 # dictionary values: email, name, resource group, manager, copy from who
-extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Nathan Hall']],
-                'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
+                'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
+                'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
+                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
                 'Alex Cisneros' :['acisneros@purestorage.com','Theater Ops','Theater Ops', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
                 'Julie Rosenberg' :['julie@purestorage.com','SE Specialist','SE Specialist', ['Michael Richardson']],   #adding for CTM
                 'Markus Wolf' :['markus@purestorage.com','SE Specialist','SE Specialist', ['Carl McQuillan']], ## adding for CTM
@@ -446,11 +517,11 @@ SE_Subordinate_Permission.drop_duplicates(subset=['SFDC_UserID', 'Subordinate'],
 
 # Step 3: adding exception cases: Users in the supporting organization and needed access
 # dictionary values: email, name, resource group, manager, copy from who
-extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                'Alex Cisneros' :['acisneros@purestorage.com','Theater Ops','Theater Ops', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
+extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
+                'Shawn Rosemarin' : ['srosemarin@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
+                'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Manager', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
+                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Manager', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
+                'Alex Cisneros' :['acisneros@purestorage.com','Theater Ops','Theater Ops', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
                 'Julie Rosenberg' :['julie@purestorage.com','SE Specialist','SE Specialist', ['Michael Richardson']],   #adding for CTM
                 'Markus Wolf' :['markus@purestorage.com','SE Specialist','SE Specialist', ['Carl McQuillan']], ## adding for CTM
                 'James Slater' :['jslater@purestorage.com','SE Specialist','SE Specialist', ['Mike Roan']] ## adding for CTM
@@ -470,17 +541,22 @@ SE_Subordinate_Permission.rename(columns={'Email':'User'}, inplace=True)
 
 ## needing the subordinate roles, territory
 temp_master = quota_master[quota_master.Job_Family.isin(['Systems Engineering', 'Inside Sales'])]\
-                [['Name','EmployeeID','SFDC_UserID','Resource_Group','Territory_IDs','M1_Theater','M1_Super_Region','M1_Region','M1_District', 'M1_Segment']]
+                [['Name','EmployeeID','SFDC_UserID','Resource_Group','Territory_IDs',
+                  'M1_Theater','M1_Super_Region','M1_Region','M1_District', 'Segments']]
+                ###################
 temp_master.rename(columns = {'M1_Theater':'Theater',
                               'M1_Super_Region' : 'Super_Region',
                               'M1_Region' : 'Region',
                               'M1_District' : 'District',
-                              'M1_Segment' : 'Segment',
+                              'Segments' : 'Segment',
                               'Resource_Group' : 'Subordinate_Resource_Group',
                               'Name' : 'Subordinate',
                               'SFDC_UserID' : 'Subordinate_SFDC_UserId'}, inplace=True)
 
 SE_Subordinate_Permission = pd.merge(SE_Subordinate_Permission[['Name', 'User', 'SFDC_UserID', 'Resource_Group', 'Subordinate']], temp_master, how='left', on='Subordinate').sort_values(by = ['Name', 'Subordinate'])
+
+#adding this because SE ISR are assigned with a super region id
+SE_Subordinate_Permission.loc[SE_Subordinate_Permission.Name=='Dean Brady','Region'] = 'ISR Roll-up - AMER'
 
 # adding 1 row for Lee because he own a territory
 exception_user = {'Name' : 'Lee Morris',
@@ -538,9 +614,9 @@ SE_District_Permission.drop_duplicates(subset=['SFDC_UserID', 'Territory_ID'], k
 
 # {Name : [User email, Resource_Group,Manager], [Names to copy]}
 extra_users = { 'April Liu' : ['aliu@purestorage.com','SE Support', 'Steve Gordon', ['Shawn Rosemarin']],
-                'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Andrew LeSage', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Gary Kortye', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']],
-                'Alex Cisneros' :['acisneros@purestorage.com','Theater Ops','Ed Ho', ['Carl McQuillan', 'Nathan Hall','Mark Jobbins','Mike Canavan']]
+                'Thomas Waung' : ['twaung@purestorage.com', 'SE Support', 'Andrew LeSage', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
+                'Steve Gordon' :['sgordon@purestorage.com','SE Support','Gary Kortye', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
+                'Alex Cisneros' :['acisneros@purestorage.com','Theater Ops','Ed Ho', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']]
               }
 
 for i in list(extra_users.keys()) :
