@@ -8,7 +8,7 @@ import pandas as pd
 import project_config as cfg
 import pyodbc
 import datetime
-
+from builtins import str
 
 #=======================================================================
 # Read the Territory ID master
@@ -25,7 +25,13 @@ def get_TerritoryID_Master(refresh = 1):
         #target = "Export Org Hierarchy 04.11.2019.xls"
         #target = "Export Org Coverage and Quota SE Ops 05.01.2019.xls"
         #target = "Export Org Coverage and Quota SE Ops 06.04.2019.xls"
-        target = "Export Org Coverage and Quota SE Ops 07.08.2019.xls"
+        #target = "Export Org Coverage and Quota SE Ops 07.08.2019.xls"
+        #target = "Export Org Coverage and Quota SE Ops 08.05.2019.xls"
+        #target = "Export Org Coverage and Quota SE Ops 09.04.2019.xls"
+        #target = "Export Org Coverage and Quota SE Ops 10.08.2019.xls"
+        #target = "Export Org Coverage and Quota SE Ops 11.05.2019.xls"
+        ####target = "Export Org Coverage and Quota SE Ops 12.06.2019.xls" ## last FY20 file
+        target = 'SE Territory Quota Report.xls'
 
         supplment = "Supplement.xlsx"
              
@@ -35,7 +41,7 @@ def get_TerritoryID_Master(refresh = 1):
         new_names = list(prep_file.NewName)
         data_type = dict(zip(prep_file.NewName, prep_file.DataType))
           
-        output = pd.read_excel(cfg.source_data_folder + target, sheet_name='Sheet 1', skiprows=2, usecols=read_cols, names=new_names,
+        output = pd.read_excel(cfg.source_data_folder + target, sheet_name='Sheet 1', skiprows=1, usecols=read_cols, names=new_names,
                                dtypes=data_type, keep_default_na=True)
          
             
@@ -84,7 +90,12 @@ def get_TerritoryID_Master(refresh = 1):
         xls = pd.ExcelFile(cfg.sup_folder + supplment, on_demand = True)
         sheets = xls.sheet_names
         
-        SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name=sheets[0], header=0, usecols = "N:Q", names=['SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division', 'Territory_ID'])
+        #FY20
+        #SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name=sheets[1], header=0, usecols = "F:I", names=['SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division', 'Territory_ID'])
+
+        #FY21
+        SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name='Anaplan-SFDC Map FY21', header=0, skiprows=1, usecols = "B,E:G", names=['Territory_ID','SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division'])
+
         '''
         for i in sheets[:1]:  # use the manual patched sheet
             temp = pd.read_excel(cfg.sup_folder + supplment, sheet_name=i, header=0, usecols = "J:M",names=['SFDC_Theater','Division','Sub_Division', 'Territory_ID'])
@@ -96,16 +107,20 @@ def get_TerritoryID_Master(refresh = 1):
         ID_Master = pd.merge(output, SFDC_sub_division, how='left', left_on='Territory_ID', right_on='Territory_ID')       
         #ID_Master.loc[output.Theater=='Global Systems Integrator','Sub_Division'] = 'GSI'
         #ID_Master.to_csv(cfg.output_folder+'TerritoryID_Master.txt', sep="|", index=False)     
-                       
 
-        Quota_assignment_col = ['Q1_Quota','Q2_Quota','Q3_Quota', 'Q4_Quota']
-                
+        
+        ## calculate the 1H, 2H and Annual quota
+        ID_Master['1H_Quota'] = ID_Master['Q1_Quota'] + ID_Master['Q2_Quota']
+        ID_Master['2H_Quota'] = ID_Master['Q3_Quota'] + ID_Master['Q4_Quota']
+        ID_Master['FY_Quota'] = ID_Master['Q1_Quota'] + ID_Master['Q2_Quota'] + ID_Master['Q3_Quota'] + ID_Master['Q4_Quota']
+
+        Quota_assignment_col = ['Q1_Quota','Q2_Quota','Q3_Quota', 'Q4_Quota', '1H_Quota','2H_Quota','FY_Quota']
+               
         Territory_Quota = pd.melt(ID_Master, id_vars = ['Theater','Super_Region','Region','District', 'Territory','Territory_ID','SFDC_Theater','SFDC_Division','SFDC_Sub_Division','Level'],
-                       value_vars=Quota_assignment_col, var_name='Quarter',value_name='Quota')
-        Territory_Quota['Quarter'] = Territory_Quota.Quarter.str[0:2]
-        Territory_Quota['Year'] = 'FY 2020'
-        
-        
+                       value_vars=Quota_assignment_col, var_name='Period',value_name='Quota')
+        Territory_Quota['Period'] = Territory_Quota.Period.str[0:2]
+        Territory_Quota['Year'] = 'FY21'
+       
         ## writing to the database
         # import pyodbc
         from sqlalchemy import create_engine
@@ -135,14 +150,14 @@ def get_TerritoryID_Master(refresh = 1):
             data_type[TerritoryID_Master_type.iloc[i].Columns] = eval(TerritoryID_Master_type.iloc[i].DataType)
         
         a = list(set(ID_Master.columns) - set(Quota_assignment_col))
-        ID_Master[a].to_sql('TerritoryID_Master', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+        ID_Master[a].to_sql('TerritoryID_Master_FY21', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
         
         Territory_Quota_type = to_sql_type[to_sql_type.DB_TableName == 'Territory_Quota']
         data_type = {}
         for i in range(0, len(Territory_Quota_type.Columns)):
             data_type[Territory_Quota_type.Columns.iloc[i]] = eval(Territory_Quota_type.DataType.iloc[i])
             
-        Territory_Quota.to_sql('Territory_Quota', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+        Territory_Quota.to_sql('Territory_Quota_FY21', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
         
         
     else: # not refreshing
@@ -202,11 +217,18 @@ def get_anaplan_quota (refresh=1):
     #target = "Export Employee and New Hire Coverage and Quota 05.01.2019.xls"
     #target = "Export Employee and New Hire Coverage and Quota 05.08.2019.xls"
     #target = "Export Employee and New Hire Coverage and Quota 06.04.2019.xls"
-    target = "Export Employee and New Hire Coverage and Quota 07.08.2019.xls"
-    
+    #target = "Export Employee and New Hire Coverage and Quota 07.08.2019.xls"
+    #target = "Export Employee and New Hire Coverage and Quota 08.05.2019.xls"
+    #target = "Export Employee and New Hire Coverage and Quota 09.04.2019.xls"
+    #target = "Export Employee and New Hire Coverage and Quota 10.08.2019.xls"
+    #target = "Export Employee and New Hire Coverage and Quota 11.05.2019.xls"
+    #target = "Export Employee and New Hire Coverage and Quota 12.06.2019.xls"
+    #target = "Export Employee and New Hire Coverage and Quota 01.08.2020.xls"
+    target = "Employee Coverage and Quota Report - 02.21.2020.xlsx"
+   
     supplment = "Supplement.xlsx"
     
-    prep_file = pd.read_excel(cfg.sup_folder + supplment, sheet_name='AnaplanMaster', skiprows=3, header=0, usecols="H,K:M")
+    prep_file = pd.read_excel(cfg.sup_folder + supplment, sheet_name='AnaplanMaster', skiprows=3, header=0, usecols="Q,S:U")
     prep_file = prep_file[prep_file.Include == 1.0]
     read_cols = ",".join(list(prep_file.Column))
     new_names = list(prep_file.NewName)
@@ -225,6 +247,7 @@ def get_anaplan_quota (refresh=1):
     output = output[output.Territory_IDs!='No Plan / No Coverage']
     
     #Lookup the missing SFDC ID & email
+    '''
     lookup = output[(output.SFDC_UserID.isnull()) & ~(output.Name.str.match('SR-*')) & (output.Name.str.match('^[a-zA-Z]'))][['Name']]    
     lookup_str = '(\'' + lookup['Name'][:1].values[0] + '\','
     for i in range(1, len(lookup)-1):       
@@ -241,26 +264,28 @@ def get_anaplan_quota (refresh=1):
     
     cnxn = pyodbc.connect('DSN=PS-SQL-PROD01; Trust_Connection = yes',DRIVER='{ODBC Driver 13 for SQL Server}', SERVER='PS-SQL-PROD01', Database='PureDW_SFDC_staging')
     Missing_SFDC_ID = pd.read_sql(query,cnxn)
-
+    
     output = pd.merge(output, Missing_SFDC_ID[['Id','Name']], how='left', left_on='Name', right_on='Name')
     output.loc[output.SFDC_UserID.isnull(),'SFDC_UserID'] = output.loc[output.SFDC_UserID.isnull(),'Id']
     output.drop(columns=['Id'], inplace=True)
+    '''
     
-    output['Year'] = 'FY 2020'  ##because to match with SFDC, which the FY is a year 'behind'
+    output['Year'] = 'FY21'  ##because to match with SFDC, which the FY is a year 'behind'????
     #output['HC_Status'] = output['HC_Status'].map({False:'Onboard',True:'TBH'})
-    output['HC_Status'] = (output.Name.str.match('^\d') | output.Name.str.match('SR-*')).map({False:'Onboard',True:'TBH'})
+    #FY21 file has only onboarded employee 
+    #output['HC_Status'] = (output.Name.str.match('^\d') | output.Name.str.match('SR-*')).map({False:'Onboard',True:'TBH'})
     
     #-----Derive Resource_Group from Headcount_Group ------------------------------------------
     Resource_Headcount_Group = {
-                            'DM_group' : ["Sales Mgmt", "Sales Management" "Sales Mgmt QBH", "Field Sales"], 
-                            'AE_group' : ["Sales QBH", "Sales-QBH", "Sales AE"],  # adding Sales AE on Jun 17
-                            'SE_Mgr_group' : ["SE Mgmt", "SE Management"],
-                            'SE_group' : ["SE", "System Engineer"],
-                            'SE_Specialist_group' : ["SE Specialist"]
+                            'DM_group' : ["Sales Mgmt", "Sales Mgmt QBH"], #"Sales Management" , "Field Sales"
+                            'AE_group' : [ "Sales AE"],  # adding Sales AE on Jun 17 #"Sales QBH", "Sales-QBH",
+                            'SE_Mgr_group' : ["SE Mgmt"], #, "SE Management"
+                            'SE_group' : ["SE"], #, "System Engineer"
+                            'SE_Specialist_group' : ["SE Specialist IC"]
                             }
     
     Resource_Group_label = {'DM_group' : 'DM',
-                            'AE_group' : 'Sales QBH',
+                            'AE_group' : 'AE',
                             'SE_Mgr_group' : 'SEM',
                             'SE_group' : 'SE',
                             'SE_Specialist_group' : 'SE Specialist'}
@@ -269,12 +294,18 @@ def get_anaplan_quota (refresh=1):
         output.loc[(output.Headcount_Group.isin(Resource_Headcount_Group[i]), 'Resource_Group')] = Resource_Group_label[i]
     
     #------Read the override values ------------------------------------------------------------------------ 
-    prep_file = pd.read_excel(cfg.sup_folder + supplment, sheet_name='Mgmt_Roster_nonDefault', skiprows=3, header=0, usecols="A:B")
-    output = pd.merge(output, prep_file, how='left', left_on = 'Name', right_on = 'Name')
+    prep_file = pd.read_excel(cfg.sup_folder + supplment, sheet_name='Mgmt_Roster_nonDefault', skiprows=3, header=0, usecols="B,C")
+    prep_file = prep_file[~prep_file['EmployeeID'].isna()]
+    prep_file['EmployeeID'] = prep_file['EmployeeID'].astype('int').astype('str')
+    output.EmployeeID = output.EmployeeID.fillna(0).astype(int).astype(str)
+    
+    output = pd.merge(output, prep_file, how='left', on = 'EmployeeID')
     output.loc[(~output.Override_Resource_Group.isna()),'Resource_Group'] = output.Override_Resource_Group
     
     output.drop('Override_Resource_Group', axis=1, inplace=True)
     
+    output.Manager_EmployeeID = output.Manager_EmployeeID.fillna(0).astype(int).astype(str)
+    output.loc[output.Manager_EmployeeID=='0','Manager_EmployeeID'] = ''   
     # the Year information is from the spreadsheet file name
     
     return output
