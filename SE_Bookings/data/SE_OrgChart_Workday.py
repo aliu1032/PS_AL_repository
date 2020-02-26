@@ -8,14 +8,24 @@ import pandas as pd
 import project_config as cfg
 import pyodbc
 import datetime
-from setuptools._vendor.packaging import _structures
-
 
 #target = 'Shawn Rosemarin Employee Information Weekly Report 2019-07-28 09_30 PDT.xlsx'
 #target = 'Shawn Rosemarin Employee Information Weekly Report 2019-08-11 09_30 PDT.xlsx'
 #target = 'Shawn Rosemarin Employee Information Weekly Report 2019-08-25 09_30 PDT.xlsx'
-target = 'Shawn Rosemarin Employee Information Weekly Report 2019-09-01 09_30 PDT.xlsx'
-snapshot_date = datetime.date(2019, 9, 1)
+#target = 'Shawn Rosemarin Employee Information Weekly Report 2019-09-01 09_30 PDT.xlsx'
+#target = 'Shawn Rosemarin Employee Information Weekly Report 2019-09-29 09_30 PDT.xlsx'
+#target = 'Shawn Rosemarin Employee Information Weekly Report 2019-10-13 09_30 PDT.xlsx'
+#target = 'Shawn Rosemarin Employee Information Weekly Report 2019-10-20 09_30 PDT.xlsx'
+#target = 'Shawn Rosemarin Employee Information Weekly Report 2019-10-27 09_30 PDT.xlsx'
+#target = 'CR_Shawn Rosemarin Supervisory Organization Members and Information(New Hires) 2019-05-29 09_30 PDT.xlsx'
+#target = 'Shawn Rosemarin Employee Information Weekly Report 2019-11-17 09_30 PST.xlsx'
+#target = 'Shawn Rosemarin Employee Information Weekly Report 2019-12-01 09_30 PST.xlsx'
+#target = 'Shawn Rosemarin Employee Information Weekly Report 2020-01-05 09_30 PST.xlsx'
+#target = 'Shawn Rosemarin Employee Information Weekly Report 2020-01-12 09_30 PST.xlsx'
+#target = 'Shawn Rosemarin Employee Information Weekly Report 2020-01-26 09_30 PST.xlsx'
+target = 'Shawn Rosemarin Employee Information Weekly Report 2020-02-16 09_30 PST.xlsx'
+
+snapshot_date = datetime.date(2020, 2, 16)
 
 supplement = "Supplement.xlsx"
     
@@ -52,4 +62,28 @@ output['Position'] = output['Position'].replace(r'[^\x00-\x7F]+', '', regex=True
 #Extract the preferred name from Position
 output['Perferred_Name'] = output.Position.apply(lambda x : x[x.rfind(" - ")+3:].strip())
 output['Title'] = output.Position.apply(lambda x : x[:x.rfind(" - ")].strip())
+
+# Manager Name is the perferred name
+temp_manager = output[['EmployeeID','Perferred_Name']].copy()
+temp_manager.rename(columns= {'EmployeeID':'Manager_EmployeeID', 'Perferred_Name':'Manager'}, inplace=True)
+output = pd.merge(output, temp_manager, how='left', on='Manager')
+
+from sqlalchemy import create_engine
+from sqlalchemy import types as sqlalchemy_types
+
+server = 'ALIU-X1'
+database = 'ALIU_DB1'
+conn_str = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') #work
+output.to_sql('SE_Org_Members', con=conn_str, if_exists='replace', schema="dbo", index=False)
+
+print ('I am done updating SE Org')
+
+
+
+
+
+
+
+
+
   
