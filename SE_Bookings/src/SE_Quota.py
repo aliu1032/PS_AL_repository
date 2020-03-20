@@ -39,16 +39,9 @@ TerritoryID_Master = get_TerritoryID_Master(1)
 # SE has a $ quota per month, quarter each year (regardless number of territory he/she cover
 # A SE may be assigned to 1 or N Territories
 #===============================================================================
-#from getData import get_quota
-#quota_master = get_quota(1)
-#quota_master['Name'] = quota_master.FirstName.str.cat(quota_master.LastName, sep=' ')
-
 from getData import get_anaplan_quota
 quota_master = get_anaplan_quota(1)
 
-## Joe Mercede
-## Eugenue McCarth
-## Coverage assignment vs Comm Plan Assignment 
 #------------------------------------------------------------------------------ 
 # Create report to show the Quota assignment , SE to AE mapping, using Anaplan coverage information
 # The report helps user to verify the SE org compensation plan assignment
@@ -141,19 +134,6 @@ def expand_territory(input_series, expand_to_level, ISO):
     source_territory = input_series['Territory_ID']
     #print(source_territory)
     #print((input_series[header_col]))
-    '''
-    if ISO:
-        print('ISO = True')
-        row_count = len(TerritoryID_Master[(TerritoryID_Master.Level == expand_to_level) &\
-                                           (TerritoryID_Master.Territory_ID.str.startswith(source_territory)) 
-                                           ])
-        d1 = pd.DataFrame([input_series[header_col]]*row_count, columns = header_col)
-        d2 = pd.DataFrame(TerritoryID_Master[(TerritoryID_Master.Level == expand_to_level) &\
-                                             (TerritoryID_Master.Territory_ID.str.startswith(source_territory))
-                                            ], columns = TerritoryID_Master.columns)
-        output = pd.concat([d1.reset_index(),d2.reset_index()],axis=1)
-    else:
-    '''
     row_count = len(TerritoryID_Master[(TerritoryID_Master.Level == expand_to_level) &\
                                        (TerritoryID_Master.Territory_ID.str.startswith(source_territory)) &\
                                        (~TerritoryID_Master.SFDC_Division.fillna('').str.startswith('ISO'))
@@ -216,43 +196,10 @@ temp_ISO2.reset_index(inplace=True)
 temp_ISO2['Level'] = 'District'
 
 Coverage_assignment_L = Coverage_assignment_L.append(temp_ISO2, sort="False")
-#temp_ISO.drop_duplicates(subset=['EmployeeID', 'District'], keep='first', inplace=True)
-#temp_ISO2 = Quota_assignment_L[Quota_assignment_L.Name =='Dean Brady'][['Name','Title','Resource_Group', 'EmployeeID', 'SFDC_UserID', 'Email',
-#                                                                       'Manager','Manager_EmployeeID', 'Territory_IDs','Segments', 'Type',
-#                                                                      'Quota_assignment', 'Q1_Quota','Q2_Quota','Q3_Quota', 'Q4_Quota', '1H_Quota', '2H_Quota','FY_Quota']]
-
-# Find the unique District
-
-'''
-temp_ISO = Coverage_assignment_L[(Coverage_assignment_L.Resource_Group == 'SE') & \
-                                 (Coverage_assignment_L.Level != 'Territory') &\
-                                ~(Coverage_assignment_L.Level=='') &\
-                                (Coverage_assignment_L.Theater.str.startswith('ISR'))  ]
-
-
-temp2 = pd.DataFrame()
-for i in range(len(temp_ISO)):
-    working_on_row = temp_ISO.index[i] 
-    temp2 = temp2.append(expand_territory(temp_ISO.iloc[i],'Territory', True))
-    Coverage_assignment_L.drop([working_on_row], axis='rows', inplace=True) ##
-
-extract_col = ['Name', 'Title', 'Resource_Group', 'EmployeeID', 'SFDC_UserID', 'Email', 'Manager', 'Manager_EmployeeID', 'Territory_IDs', 'Quota_assignment']    
-Coverage_assignment_L = Coverage_assignment_L.append(temp2[extract_col + list(TerritoryID_Master.columns)], sort="False")
-
-# Read the AMER ISR Territory Conversion
-supplment = "TerritoryID_to_SFDC_SubDivision_Mapping.xlsx"
-xls = pd.ExcelFile(cfg.sup_folder + supplment, on_demand = True)
-sheets = xls.sheet_names
-AMER_ISR_Conversion = pd.read_excel(cfg.sup_folder + supplment, sheet_name=sheets[1], header=0, usecols = "F:J", names=['SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division', 'Territory_ID', 'ISR_AMER_Map'])
-AMER_ISR_Conversion1 = AMER_ISR_Conversion[AMER_ISR_Conversion.ISR_AMER_Map.fillna('').str.startswith('OL_')]
-AMER_ISR_Conversion2 = AMER_ISR_Conversion[AMER_ISR_Conversion.ISR_AMER_Map.fillna('').str.startswith('WW_')]
-
-for i in range(len(AMER_ISR_Conversion2.Territory_ID)):
-    Coverage_assignment_L.loc[Coverage_assignment_L.Territory_ID==AMER_ISR_Conversion2.Territory_ID.iloc[i],'Territory_ID'] = AMER_ISR_Conversion2.ISR_AMER_Map.iloc[i]
-'''
 
 # Write the Coverage Assignment to a text file
 #Coverage_assignment_L.to_csv(cfg.output_folder+'Coverage_Assignment_byName.txt', sep="|", index=False)
+
 to_sql_type = db_columns_types[db_columns_types.DB_TableName == 'Coverage_assignment_byName']
 
 data_type={}
@@ -264,15 +211,11 @@ Coverage_assignment_L.to_sql('Coverage_assignment_byName_FY21', con=conn_str, if
 ''''''
 
 # Make an output of Coverage_assignment by Territory
-# Notes: Since the AMER ISR Territories are replaced by the WW_* Territory ID, the OL_ISR_AMS* looks like not covered
 temp = Coverage_assignment_L[~(Coverage_assignment_L.Resource_Group=='') & ~(Coverage_assignment_L.Territory_ID=='')]\
                                        [['Name','Territory_ID','Resource_Group','EmployeeID','SFDC_UserID', 'Email']]
 temp['EmployeeID'] = temp['EmployeeID'].astype('str')
 Coverage_assignment_W = pd.pivot_table(temp, \
                                        index = 'Territory_ID', columns='Resource_Group', values=['Name','Email','SFDC_UserID','EmployeeID'], aggfunc=lambda x: ' | '.join(x))
-                                                                                                 #,]'EmployeeID',
-#'Manager', 'Manager_EmployeeID'
-#Coverage_assignment_L.fillna(" ", inplace=True)
 
 new_name=[]
 for i in Coverage_assignment_W.columns.levels[0]:
@@ -337,7 +280,6 @@ SE_quota_W = quota_master[(quota_master.Job_Family == 'Systems Engineering') | (
              [['Name','Territory_IDs','Year', 'Resource_Group', 'EmployeeID', 'SFDC_UserID', 'Email',
                'M1_Theater','M1_Super_Region','M1_Region','M1_District','Segments', 
                'M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned']]
-##SE_quota_W.rename(columns = {'Segments' : 'M1_Segment'}, inplace =True)  ### need to check on Oct 7, 2019
 
 ## calculate the 1H, 2H and Annual quota
 SE_quota_W['1H'] = SE_quota_W['M1_Q1_Quota_Assigned'] + SE_quota_W['M1_Q2_Quota_Assigned']
@@ -416,8 +358,9 @@ for i in Users_need_access:
     
     for j in User_assigned_coverage:
         # find the Territory Id of Districts roll under the user's coverage
-        Coverage_List = pd.DataFrame(list(TerritoryID_Master[TerritoryID_Master.Territory_ID.str.startswith(j) & (TerritoryID_Master.Territory_ID.str.len() <= 18)]['Territory_ID'])
+        Coverage_List = pd.DataFrame(list(TerritoryID_Master[TerritoryID_Master.Territory_ID.str.startswith(j) & (TerritoryID_Master.Level == 'District')]['Territory_ID'])
                                     , columns=['Territory_ID'])
+
         if len(Coverage_List) == 0 :
             for x in User_assigned_coverage:
                 Coverage_List = Coverage_List.append({'Territory_ID':x[:18]}, ignore_index=True)
@@ -449,7 +392,7 @@ extra_users = { 'April Liu' : ['aliu@purestorage.com','104663','SE Support', 'St
 
 for i in list(extra_users.keys()) :
     for j in range(0, len(extra_users[i][4])):
-        temp = District_Permission[District_Permission.Name == extra_users[i][3][j]].copy()
+        temp = District_Permission[District_Permission.Name == extra_users[i][4][j]].copy()
         temp.Name = i
         temp.Email = extra_users[i][0]
         temp.EmployeeID = extra_users[i][1]
@@ -545,7 +488,7 @@ extra_users = { 'April Liu' : ['aliu@purestorage.com','104663','SE Support', 'Ma
 
 for i in list(extra_users.keys()) :
     for j in range(0, len(extra_users[i][4])):
-        temp = SubDivision_Permission[SubDivision_Permission.Name == extra_users[i][3][j]].copy()
+        temp = SubDivision_Permission[SubDivision_Permission.Name == extra_users[i][4][j]].copy()
         temp.Name = i
         temp.Email = extra_users[i][0]
         temp.EmployeeID = extra_users[i][1]
