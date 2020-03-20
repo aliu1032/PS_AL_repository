@@ -31,7 +31,8 @@ def get_TerritoryID_Master(refresh = 1):
         #target = "Export Org Coverage and Quota SE Ops 10.08.2019.xls"
         #target = "Export Org Coverage and Quota SE Ops 11.05.2019.xls"
         ####target = "Export Org Coverage and Quota SE Ops 12.06.2019.xls" ## last FY20 file
-        target = 'SE Territory Quota Report.xls'
+        #target = 'SE Territory Quota Report.xls'
+        target = 'Coverage and Quota Report by Month - 03.18.2020.xlsx'
 
         supplment = "Supplement.xlsx"
              
@@ -42,10 +43,12 @@ def get_TerritoryID_Master(refresh = 1):
         data_type = dict(zip(prep_file.NewName, prep_file.DataType))
           
         output = pd.read_excel(cfg.source_data_folder + target, sheet_name='Sheet 1', skiprows=1, usecols=read_cols, names=new_names,
-                               dtypes=data_type, keep_default_na=True)
-         
+                               dtypes=data_type, keep_default_na=True)        
             
-        output['Short_Description'].replace('\n', "", regex=True, inplace=True) 
+        output['Short_Description'].replace('\n', "", regex=True, inplace=True)
+        output.loc[output.Territory_ID=='OL_GLO_EMA_EMA_EG1','Short_Description'] = 'EMEA Globals (team 1)'
+        output.loc[output.Territory_ID=='OL_GLO_EMA_EMA_EG2','Short_Description'] = 'EMEA Globals (team 2)'
+        output.loc[output.Territory_ID=='OL_GLO_EMA_EMA','Short_Description'] = 'EMEA Globals'  
         #a = output[output.Territory_ID=='WW_EMA_EEM_EMS_ZAR_002']['Territory_Description']
         #b = a.str.replace('\n', " ") 
         #output.loc[output.Territory_ID=='WW_EMA_EEM_EMS_ZAR_002','Territory_Description'] = b   
@@ -116,7 +119,7 @@ def get_TerritoryID_Master(refresh = 1):
 
         Quota_assignment_col = ['Q1_Quota','Q2_Quota','Q3_Quota', 'Q4_Quota', '1H_Quota','2H_Quota','FY_Quota']
                
-        Territory_Quota = pd.melt(ID_Master, id_vars = ['Theater','Super_Region','Region','District', 'Territory','Territory_ID','SFDC_Theater','SFDC_Division','SFDC_Sub_Division','Level'],
+        Territory_Quota = pd.melt(ID_Master, id_vars = ['Hierarchy','Theater','Super_Region','Region','District', 'Territory','Territory_ID','SFDC_Theater','SFDC_Division','SFDC_Sub_Division','Level'],
                        value_vars=Quota_assignment_col, var_name='Period',value_name='Quota')
         Territory_Quota['Period'] = Territory_Quota.Period.str[0:2]
         Territory_Quota['Year'] = 'FY21'
@@ -151,14 +154,16 @@ def get_TerritoryID_Master(refresh = 1):
         
         a = list(set(ID_Master.columns) - set(Quota_assignment_col))
         ID_Master[a].to_sql('TerritoryID_Master_FY21', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+        #[ID_Master.Hierarchy != 'Other Overlay']
+        #ID_Master.to_csv(cfg.output_folder+'TerritoryID_Master_FY21.txt', sep="|", index=False)
         
         Territory_Quota_type = to_sql_type[to_sql_type.DB_TableName == 'Territory_Quota']
         data_type = {}
         for i in range(0, len(Territory_Quota_type.Columns)):
             data_type[Territory_Quota_type.Columns.iloc[i]] = eval(Territory_Quota_type.DataType.iloc[i])
-            
-        Territory_Quota.to_sql('Territory_Quota_FY21', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
         
+        #Territory_Quota.to_csv(cfg.output_folder+'Territory_Quota_FY21.txt', sep="|", index=False)
+        Territory_Quota[Territory_Quota.Hierarchy != 'Other Overlay'].to_sql('Territory_Quota_FY21', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
         
     else: # not refreshing
         print ('Reading TerritoryID_Master from database')
@@ -224,7 +229,9 @@ def get_anaplan_quota (refresh=1):
     #target = "Export Employee and New Hire Coverage and Quota 11.05.2019.xls"
     #target = "Export Employee and New Hire Coverage and Quota 12.06.2019.xls"
     #target = "Export Employee and New Hire Coverage and Quota 01.08.2020.xls"
-    target = "Employee Coverage and Quota Report - 02.21.2020.xlsx"
+    #target = "Employee Coverage and Quota Report - 02.27.2020.xlsx"
+    #target = "Employee Coverage and Quota Report - 03.04.2020.xlsx"
+    target = "Employee Coverage and Quota Report - 03.18.2020.xlsx"
    
     supplment = "Supplement.xlsx"
     
@@ -245,7 +252,12 @@ def get_anaplan_quota (refresh=1):
     
     #remove the resources who do not have a quota/compensation territory assignment
     output = output[output.Territory_IDs!='No Plan / No Coverage']
-    
+    output.loc[output.Territory_IDs.str.contains('OL_GLO_EMA_EMA_EG1', na=False),'M1_District'] = 'EMEA Globals (team 1)'
+    output.loc[output.Territory_IDs.str.contains('OL_GLO_EMA_EMA_EG1', na=False),'M1_Region'] = 'EMEA Globals'
+    output.loc[output.Territory_IDs.str.contains('OL_GLO_EMA_EMA_EG2', na=False),'M1_District'] = 'EMEA Globals (team 2)'
+    output.loc[output.Territory_IDs.str.contains('OL_GLO_EMA_EMA_EG2', na=False),'M1_Region'] = 'EMEA Globals'
+    output.loc[output.Territory_IDs.str.contains('OL_GLO_EMA_EMA', na=False),'M1_Region'] = 'EMEA Globals'
+  
     #Lookup the missing SFDC ID & email
     '''
     lookup = output[(output.SFDC_UserID.isnull()) & ~(output.Name.str.match('SR-*')) & (output.Name.str.match('^[a-zA-Z]'))][['Name']]    
@@ -278,7 +290,7 @@ def get_anaplan_quota (refresh=1):
     #-----Derive Resource_Group from Headcount_Group ------------------------------------------
     Resource_Headcount_Group = {
                             'DM_group' : ["Sales Mgmt", "Sales Mgmt QBH"], #"Sales Management" , "Field Sales"
-                            'AE_group' : [ "Sales AE"],  # adding Sales AE on Jun 17 #"Sales QBH", "Sales-QBH",
+                            'AE_group' : [ "Sales AE", "Overlay AE"],  # adding Sales AE on Jun 17 #"Sales QBH", "Sales-QBH",
                             'SE_Mgr_group' : ["SE Mgmt"], #, "SE Management"
                             'SE_group' : ["SE"], #, "System Engineer"
                             'SE_Specialist_group' : ["SE Specialist IC"]
