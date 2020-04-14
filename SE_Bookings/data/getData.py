@@ -32,7 +32,8 @@ def get_TerritoryID_Master(refresh = 1):
         #target = "Export Org Coverage and Quota SE Ops 11.05.2019.xls"
         ####target = "Export Org Coverage and Quota SE Ops 12.06.2019.xls" ## last FY20 file
         #target = 'SE Territory Quota Report.xls'
-        target = 'Coverage and Quota Report by Month - 03.18.2020.xlsx'
+        #target = 'Coverage and Quota Report by Month - 03.18.2020.xlsx'
+        target = 'Coverage and Quota Report by Month - 03.31.2020.xlsx'
 
         supplment = "Supplement.xlsx"
              
@@ -231,7 +232,8 @@ def get_anaplan_quota (refresh=1):
     #target = "Export Employee and New Hire Coverage and Quota 01.08.2020.xls"
     #target = "Employee Coverage and Quota Report - 02.27.2020.xlsx"
     #target = "Employee Coverage and Quota Report - 03.04.2020.xlsx"
-    target = "Employee Coverage and Quota Report - 03.18.2020.xlsx"
+    #target = "Employee Coverage and Quota Report - 03.18.2020.xlsx"
+    target = "Employee Coverage and Quota Report - 03.31.2020.xlsx"
    
     supplment = "Supplement.xlsx"
     

@@ -176,7 +176,7 @@ select [Final].*
 			when datediff(year, [Current Fiscal Month], [Fiscal Close Month]) = 0 then 'Current'
 	  end as [CloseYr_State]
 		
-		/* setup date for 7 days change summary */  
+	/* setup date for 7 days change summary */  
 	, case -- have to tag in this sequence: Closed, New, the stage change. 
 		when ([Close Date] >= (getdate()-7) and Stage in ('Stage 8 - Closed/Won','Stage 8 - Credit')) then 'Won' -- Closed in last 7 days
 		when ([Close Date] >= (getdate()-7) and Stage in ('Stage 8 - Closed/ Disqualified','Stage 8 - Closed/Lost','Stage 8 - Closed/No Decision', 'Stage 8 - Closed/ Low Capacity'))
@@ -185,18 +185,19 @@ select [Final].*
 		when cast(SUBSTRING(Stage, 7, 1) as Int) > cast(SUBSTRING([Previous Stage], 7, 1) as Int) then 'Advanced'
 		when cast(SUBSTRING(Stage, 7, 1) as Int) < cast(SUBSTRING([Previous Stage], 7, 1) as Int) then 'Setback'
 		when cast(SUBSTRING(Stage, 7, 1) as Int) = cast(SUBSTRING([Previous Stage], 7, 1) as Int) then 'No change'
-      end Stage_changed_how
+      end as Week_Stage_changed
       
-	, case when ([Close Date] >= (getdate()-7) and cast(SUBSTRING(Stage, 7,1) as Int) = 8) then 1 else 0 end as Closed_Count
-	, case when ([Close Date] >= (getdate()-7) and Stage in ('Stage 8 - Closed/Won','Stage 8 - Credit')) then Amount_in_USD else 0 end as Won$_ThisWeek
-	, Case when (CreatedDate >= (getdate()-7) and cast(SUBSTRING(Stage, 7,1) as Int) != 8) then 1 else 0 end as New_Count  -- New this week and have not closed
+	, case when ([Close Date] >= (getdate()-7) and cast(SUBSTRING(Stage, 7,1) as Int) = 8) then 1 else 0 end as Week_Close_Count
+	, case when ([Close Date] >= (getdate()-7) and Stage in ('Stage 8 - Closed/Won','Stage 8 - Credit')) then Amount_in_USD else 0 end as Week_Won$
+	, Case when (CreatedDate >= (getdate()-7) and cast(SUBSTRING(Stage, 7,1) as Int) != 8) then 1 else 0 end as Week_New_Count  -- New this week and have not closed
 	, case when cast(SUBSTRING(Stage, 7, 1) as Int) > cast(SUBSTRING([Previous Stage], 7, 1) as Int) and
 				cast(SUBSTRING(Stage, 7,1) as Int) != 8 and  -- not advanced to close
 				CreatedDate < (getdate()-7)  -- not new this week
-		   then 1 else 0 end Stage_Advanced_Count	  
+		   then 1 else 0 end Week_Advanced_Count	  
 	, case when cast(SUBSTRING(Stage, 7, 1) as Int) < cast(SUBSTRING([Previous Stage], 7, 1) as Int) and
 				CreatedDate < (getdate()-7)  -- not new this week
-		   then 1 else 0 end Stage_Setback_Count
+		   then 1 else 0 end Week_Setback_Count
+	
 		   
 from (
 	
@@ -216,14 +217,28 @@ from (
 		
 		, Oppt.Technical_Win_State__c [Technical Win Status]
 		, Oppt.Aggressive_Sizing__c [Agressive Sizing]
+		, Oppt.Reason_s_for_Win_Loss__c [Reason for Win/Loss]
+		, Oppt.Reasons_for_Win__c [Win Reasons]
+		, Oppt.Reasons_for_Loss__c [Loss Reasons]
+		
+		, case 
+			when Oppt.Competition__c like 'Cicso%' then 'Cisco'
+			when Oppt.Competition__c like 'Cloud%' then 'Cloud'
+			when Oppt.Competition__c like 'Dell%' then 'Dell'
+			when Oppt.Competition__c like 'EMC%' then 'Dell'
+			when Oppt.Competition__c like 'HDS%' then 'HDS'
+			when Oppt.Competition__c like 'HPE%' then 'HPE'
+			when Oppt.Competition__c like 'IBM%' then 'IBM'
+			when Oppt.Competition__c like 'NetApp%' then 'NetApp'
+			when Oppt.Competition__c like 'Nimble%' then 'Nimble'
+			else Oppt.Competition__c
+			end Competition
 --		, Deals.Comp_Category
 		
 		/* Account Exec on an Opportunity */
 		, Oppt_Owner.Name Oppt_Owner
 		
-		/* Acct_Exec compensated on the booking
-		 * This is the Split owner for base deals, the FA for overlay - flashblade
-		 */
+		/* Acct_Exec compensated on the booking */
 		, Deals.Acct_Exec
 		, Deals.Acct_Exec_Territory_ID
 		, case when Deals.Acct_Exec_Territory_ID in
@@ -240,9 +255,7 @@ from (
 		, Deals.Acct_Exec_District_ID
 		, Case when (Left(Deals.Acct_Exec_District_ID, 18) is null) then Deals.Acct_Exec_District_ID else Left(Deals.Acct_Exec_District_ID, 18) end as District_Permission
 				
-		/* SE Opportunity Owner
-		 * This is the SE_Opportunity_Owner for base deals, the FA_SE for overlay - flashblade
-		 */
+		/* SE Opportunity Owner */
 		, SE_Oppt_Owner.Name SE_Oppt_Owner
 		, SE_Oppt_Owner.EmployeeNumber SE_Oppt_Owner_EmployeeID
 
@@ -250,7 +263,7 @@ from (
 		, #TempCov.Temp_CoveredBy_EmployeeID
 
 		, Assign_SE.SE_EmployeeID Assigned_SE_EmployeeID
-		, Assign_SE.SE [Assigned SE]
+		, Assign_SE.SE [SE assigned to Territory]
 		
 		, case
 				when SE_Oppt_Owner.EmployeeNumber is null then 'Empty SE Owner'
@@ -259,7 +272,6 @@ from (
 				else 'Aligned'
 			end as SE_Territory_Alignment
 
-		--, case when Deals.Comp_Category = 'Base' then
 		, case
 				when SE_Oppt_Owner.EmployeeNumber is null then 'Empty SE Owner'
 				when Assign_SE.SE_EmployeeID is null then 
@@ -275,8 +287,12 @@ from (
 						else 'Present'
 					end
 				else 'Territory aligned'
---			end
-			end as Temp_CoverageRecord
+
+			end as Temp_Coverage_Split_Record
+		
+		, P.Name Partner
+		, P_SE.Name [Partner SE]
+		, Oppt.Partner_SE_Engagement_Level__c
 		
 		, Deals.Split
 		, Deals.Currency
@@ -288,14 +304,43 @@ from (
 		
 		, Oppt.ForecastCategoryName ForecastCategory
 		, Oppt.StageName Stage
+
+		, Oppt.Eval_Stage__c POC_Stage
+			, case when (Eval_Stage__c is null or Eval_Stage__c in ('No POC')) then 'No POC' 
+		 		   when Eval_Stage__c in ('POC Potential') then 'Potential'
+		 		   when Eval_Stage__c in ('POC Installed') then 'Active'
+		 		   when Eval_Stage__c in ('POC Uninstalled') then 'Yet Return'
+		 		   when Eval_Stage__c in ('POC Converted to Sale','POC Give-Away') then 'Completed'
+		 		   else 'Error'
+		 	  end POC_Status
 		
 		, case
-			when cast(substring(Oppt.StageName, 7, 1) as int) <= 5 then 'Stage 0-5'
+			when cast(substring(Oppt.StageName, 7, 1) as int) <= 3 then 'Early Stage'
+			when cast(substring(Oppt.StageName, 7, 1) as int) <= 5 then 'Adv. Stage'
 			when cast(substring(Oppt.StageName, 7, 1) as int) <= 7 then 'Commit'
 			when Oppt.StageName in ('Stage 8 - Closed/Won','Stage 8 - Credit') then 'Won'
 			when Oppt.StageName in ('Stage 8 - Closed/ Disqualified','Stage 8 - Closed/Lost','Stage 8 - Closed/No Decision','Stage 8 - Closed/ Low Capacity') then 'Loss'
-			end as StageGroup
+		end as StageGroup
+			
+		, case when Oppt.Converted_Amount_USD__c < 0 then 'Debook'
+		   when Oppt.Converted_Amount_USD__c = 0 then '$0'
+		   when Oppt.Converted_Amount_USD__c <= 250000 then '<=$250K'
+		   when Oppt.Converted_Amount_USD__c <= 1000000 then '$250K-$1M'
+		   else '>$1M'
+		  end Deal_Size
 
+		, case 
+			when cast(substring(Oppt.StageName, 7, 1) as int) < 4
+			then case when Oppt.Converted_Amount_USD__c is null then 0 else cast(Oppt.Converted_Amount_USD__c * Deals.Split / 100 as decimal(15,2)) end
+			else 0
+		end as [Early Stage$]
+		
+		, case 
+			when cast(substring(Oppt.StageName, 7, 1) as int) >= 4 and cast(substring(Oppt.StageName, 7, 1) as int) <= 5
+			then case when Oppt.Converted_Amount_USD__c is null then 0 else cast(Oppt.Converted_Amount_USD__c * Deals.Split / 100 as decimal(15,2)) end
+			else 0
+		end as [Adv. Stage$]
+			
 		,case 
 			when cast(substring(Oppt.StageName, 7, 1) as int) >= 6 and cast(substring(Oppt.StageName, 7, 1) as int) <= 7
 			then case when Oppt.Converted_Amount_USD__c is null then 0 else cast(Oppt.Converted_Amount_USD__c * Deals.Split / 100 as decimal(15,2)) end
@@ -308,40 +353,37 @@ from (
 			else 0
 		end as [Bookings$]
 
+		,case 
+			when Oppt.StageName in ('Stage 8 - Closed/Won','Stage 8 - Credit') then 1 else 0
+		end as [Won_Count]
 
+		,case when Oppt.StageName in ('Stage 8 - Closed/Won','Stage 8 - Credit') then Deals.Id else '' end as [Won Deal]
+		,case 
+			when Oppt.StageName in ('Stage 8 - Closed/ Disqualified',
+								 'Stage 8 - Closed/Lost',
+								 'Stage 8 - Closed/No Decision', 
+								 'Stage 8 - Closed/ Low Capacity')
+			then Deals.Id else '' end as [Loss Deal]
+			
 		,case 
 			when Oppt.StageName in ('Stage 8 - Closed/ Disqualified',
 							 'Stage 8 - Closed/Lost',
 							 'Stage 8 - Closed/No Decision', 
 							 'Stage 8 - Closed/ Low Capacity')
-			then case when Oppt.Converted_Amount_USD__c is null then 0 else cast(Oppt.Converted_Amount_USD__c * Deals.Split / 100 as decimal(15,2)) end
-		else 0
-		end as [Loss$]
-/*
-		,case
-			when cast(substring(Oppt.StageName, 7, 1) as int) >= 4 and cast(substring(Oppt.StageName, 7, 1) as int) <= 7
-			then case when Oppt.Converted_Amount_USD__c is null then 0 else cast(Oppt.Converted_Amount_USD__c * Deals.Split / 100 as decimal(15,2)) end
-			else  0
-		end as [Adv. Stage$]
-
-		,case 
-			when cast(substring(Oppt.StageName, 7, 1) as int) <= 7
-			then case when Oppt.Converted_Amount_USD__c is null then 0 else cast(Oppt.Converted_Amount_USD__c * Deals.Split / 100 as decimal(15,2)) end
-			else 0
-		end as [Open$]
-*/
-		
+			then 1 else 0
+		end as [Loss_Count]
+				
 		, convert(date, oppt.CreatedDate) CreatedDate
 		, cast(Oppt.CloseDate as Date) [Close Date]
 		, Deals.[Fiscal Close Month]
-		, 'FY' + substring(cast(Year(Deals.[Fiscal Close Month]) as varchar(4)), 3,2) [Close Year]
-		, 'FY' + substring(cast(Year(Deals.[Fiscal Close Month]) as varchar(4)), 3,2) + ' Q' + cast(Datepart(Quarter, Deals.[Fiscal Close Month]) as varchar(1)) [Close Quarter]
-		, Case 
-			when Month(Deals.[Fiscal Close Month]) <= 6 then 'FY' + substring(cast(Year(Deals.[Fiscal Close Month]) as varchar(4)), 3,2) + ' 1H'
-		  	else 'FY' + substring(cast(Year(Deals.[Fiscal Close Month]) as varchar(4)), 3,2) + ' 2H'
+		, Deals.[Current Fiscal Month]
+		, 'FY' + substring(Deals.CloseDate_FiscalQuarterKey, 3,2) [Close Year]
+		, 'FY' + substring(Deals.CloseDate_FiscalQuarterKey, 3,2) + ' Q' + substring(Deals.CloseDate_FiscalQuarterKey, 5,1) [Close Quarter]
+		
+		, Case when cast(substring(Deals.CloseDate_FiscalQuarterKey, 5,1) as int) <= 2 then 'FY' + substring(Deals.CloseDate_FiscalQuarterKey, 3,2) + ' 1H'
+			   else 'FY' + substring(Deals.CloseDate_FiscalQuarterKey, 3,2) + ' 2H'
 		  end [Close Semi Year]
-		, DateFromParts(Year(DateAdd(month, 11, getdate())), Month(DateAdd(month, 11, getdate())), 1)  [Current Fiscal Month]
-			
+		  
 		, convert(varchar, getdate()-7, 107) Snapshot_Date
 		, #OpptHist.CurrencyIsoCode [Pervious CurrencyCode]
 		, cast(#OpptHist.Amount as decimal(15,2)) [Pervious Amount]
@@ -372,27 +414,33 @@ from (
 				, OpptSplit.SplitOwnerId Acct_Exec_SFDC_UserID
 				, Oppt.SE_Opportunity_Owner__c SE_Oppt_Owner_SFDC_UserID
 				, Acct_Exec.Name Acct_Exec
-				--, Acct_Exec.Territory_ID__c Acct_Exec_Territory_ID
-				--, left(Acct_Exec.Territory_ID__c, 18) as Acct_Exec_District_ID
-				, AE_Coverage.Territory_ID Acct_Exec_Territory_ID
-				, left(AE_Coverage.Territory_ID, 18) as Acct_Exec_District_ID
+				, Acct_Exec.Territory_ID__c Acct_Exec_Territory_ID /* Split Owner Territory Id in User Profile */
+				, left(Acct_Exec.Territory_ID__c, 18) as Acct_Exec_District_ID
+				--, AE_Coverage.Territory_ID Acct_Exec_Territory_ID  /* Split Owner Territory Id from Anaplan */
+				--, left(AE_Coverage.Territory_ID, 18) as Acct_Exec_District_ID
+				--, OpptSplit.Territory_ID__c Acct_Exec_Territory_ID /* Split Owner Territory Id recorded in Oppt Split */
+				--, left(OpptSplit.Territory_ID__c, 18) as Acct_Exec_District_ID
 
 				, OpptSplit.SplitPercentage Split
 				, OpptSplit.CurrencyIsoCode Currency
 				, OpptSplit.SplitAmount Amount  -- Split amount is count towards raw bookings for comp calculation
 
 				, RecType.Name RecordType
-				, DateFromParts( Year(DateAdd(month, 11, Oppt.CloseDate)), Month(DateAdd(month, 11, Oppt.CloseDate)), 1 ) [Fiscal Close Month]
-				, '1' as [Group]
+				, DateFromParts(cast(substring(CloseDate_445.FiscalMonthKey,1,4) as int), cast(substring(CloseDate_445.FiscalMonthKey,5,2) as int), 1) [Fiscal Close Month]
+				, DateFromParts(cast(substring(TodayDate_445.FiscalMonthKey,1,4) as int), cast(substring(TodayDate_445.FiscalMonthKey,5,2) as int), 1) [Current Fiscal Month]
+				, CloseDate_445.FiscalQuarterKey CloseDate_FiscalQuarterKey
+--				, '1' as [Group]
 				
 			from PureDW_SFDC_Staging.dbo.Opportunity Oppt
 				left join PureDW_SFDC_Staging.dbo.RecordType RecType on RecType.Id = Oppt.RecordTypeId
 				left join [PureDW_SFDC_staging].[dbo].[OpportunitySplit] OpptSplit on Oppt.Id = OpptSplit.OpportunityId
 				left join [PureDW_SFDC_staging].[dbo].[OpportunitySplitType] SplitType on OpptSplit.SplitTypeId = SplitType.Id
 				left join [PureDW_SFDC_staging].[dbo].[User] Acct_Exec on Acct_Exec.Id = OpptSplit.SplitOwnerID
-				left join #AE_Coverage AE_Coverage on AE_Coverage.EmployeeID = Acct_Exec.EmployeeNumber
+				--left join #AE_Coverage AE_Coverage on AE_Coverage.EmployeeID = Acct_Exec.EmployeeNumber
+				left join NetSuite.dbo.DM_Date_445_With_Past CloseDate_445 on CloseDate_445.Date_ID = convert(varchar, Oppt.CloseDate, 112)
+				left join NetSuite.dbo.DM_Date_445_With_Past TodayDate_445 on TodayDate_445.Date_ID = convert(varchar, getDate(), 112)
 
-			where Oppt.CloseDate >= '2020-02-01'  and Oppt.CloseDate < '2021-02-01'
+			where Oppt.CloseDate >= '2020-02-03'  and Oppt.CloseDate < '2021-02-01'
 			and RecType.Name in ('Sales Opportunity', 'ES2 Opportunity') --, 'CSAT Opportunity', 'Renewal', 'Internal System Request Opportunity')
 			and (Oppt.Transaction_Type__c is null or Oppt.Transaction_Type__c != 'ES2 Renewal')
 			and cast(Oppt.Theater__c as nvarchar(2)) != 'Renewals'
@@ -403,7 +451,10 @@ from (
 	left join PureDW_SFDC_Staging.dbo.Opportunity Oppt on Oppt.Id = Deals.Id
 	left join PureDW_SFDC_Staging.dbo.[User] Oppt_Owner on Oppt_Owner.Id = Oppt.OwnerId
 	left join PureDW_SFDC_Staging.dbo.[User] Acct_Exec on Acct_Exec.Id = Deals.Acct_Exec_SFDC_UserID
-	left join PureDW_SFDC_Staging.dbo.[User] SE_Oppt_Owner on SE_Oppt_Owner.Id = Deals.SE_Oppt_Owner_SFDC_UserID
+	left join PureDW_SFDC_Staging.dbo.[User] SE_Oppt_Owner on SE_Oppt_Owner.Id = Deals.SE_Oppt_Owner_SFDC_UserID		
+	left join PureDW_SFDC_STaging.dbo.Account P on P.Id = Oppt.Partner_Account__c
+	left join PureDW_SFDC_Staging.dbo.[Contact] P_SE on P_SE.Id = Oppt.Partner_SE__c
+
 	left join SalesOps_DM.dbo.Coverage_assignment_byTerritory Assign_SE on Assign_SE.Territory_ID = Acct_Exec.Territory_ID__c
 	
 	left join #TempCov on #TempCov.OpportunityId = Oppt.Id

@@ -506,7 +506,7 @@ temp_master.rename(columns={'SFDC_Sub_Division':'Sub_Division','SFDC_Division':'
 
 SubDivision_Permission = pd.merge(SubDivision_Permission[['Name', 'Email','EmployeeID', 'SFDC_UserID', 'Resource_Group','Manager', 'Sub_Division']], temp_master, how='left', left_on='Sub_Division', right_on='Sub_Division')
 SubDivision_Permission.drop_duplicates(subset=['Email', 'Sub_Division'], keep='first', inplace=True)
-SubDivision_Permission.rename(columns={'Email':'User'})  ## for Tableau to check against the login user
+SubDivision_Permission.rename(columns={'Email':'User'}, inplace=True)  ## for Tableau to check against the login user
 
 
 #SE_org_coverage.to_csv(cfg.output_folder+'SE_SubDivision_Permission.txt', sep="|", index=False)
