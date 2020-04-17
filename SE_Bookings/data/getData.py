@@ -33,7 +33,8 @@ def get_TerritoryID_Master(refresh = 1):
         ####target = "Export Org Coverage and Quota SE Ops 12.06.2019.xls" ## last FY20 file
         #target = 'SE Territory Quota Report.xls'
         #target = 'Coverage and Quota Report by Month - 03.18.2020.xlsx'
-        target = 'Coverage and Quota Report by Month - 03.31.2020.xlsx'
+        #target = 'Coverage and Quota Report by Month - 03.31.2020.xlsx'
+        target = 'Coverage and Quota Report by Month - 04.15.2020.xlsx'
 
         supplment = "Supplement.xlsx"
              
@@ -114,14 +115,21 @@ def get_TerritoryID_Master(refresh = 1):
 
         
         ## calculate the 1H, 2H and Annual quota
-        ID_Master['1H_Quota'] = ID_Master['Q1_Quota'] + ID_Master['Q2_Quota']
-        ID_Master['2H_Quota'] = ID_Master['Q3_Quota'] + ID_Master['Q4_Quota']
-        ID_Master['FY_Quota'] = ID_Master['Q1_Quota'] + ID_Master['Q2_Quota'] + ID_Master['Q3_Quota'] + ID_Master['Q4_Quota']
+        ID_Master['1H_M1_Quota'] = ID_Master['Q1_M1_Quota'] + ID_Master['Q2_M1_Quota']
+        ID_Master['2H_M1_Quota'] = ID_Master['Q3_M1_Quota'] + ID_Master['Q4_M1_Quota']
+        ID_Master['FY_M1_Quota'] = ID_Master['Q1_M1_Quota'] + ID_Master['Q2_M1_Quota'] + ID_Master['Q3_M1_Quota'] + ID_Master['Q4_M1_Quota']
 
-        Quota_assignment_col = ['Q1_Quota','Q2_Quota','Q3_Quota', 'Q4_Quota', '1H_Quota','2H_Quota','FY_Quota']
+        ## calculate the 1H, 2H and Annual quota
+        ID_Master['1H_FB_Quota'] = ID_Master['Q1_FB_Quota'] + ID_Master['Q2_FB_Quota']
+        ID_Master['2H_FB_Quota'] = ID_Master['Q3_FB_Quota'] + ID_Master['Q4_FB_Quota']
+        ID_Master['FY_FB_Quota'] = ID_Master['Q1_FB_Quota'] + ID_Master['Q2_FB_Quota'] + ID_Master['Q3_FB_Quota'] + ID_Master['Q4_FB_Quota']
+
+        Quota_assignment_col = ['Q1_M1_Quota','Q2_M1_Quota','Q3_M1_Quota', 'Q4_M1_Quota', '1H_M1_Quota','2H_M1_Quota','FY_M1_Quota',\
+                                'Q1_FB_Quota','Q2_FB_Quota','Q3_FB_Quota', 'Q4_FB_Quota', '1H_FB_Quota','2H_FB_Quota','FY_FB_Quota']
                
         Territory_Quota = pd.melt(ID_Master, id_vars = ['Hierarchy','Theater','Super_Region','Region','District', 'Territory','Territory_ID','SFDC_Theater','SFDC_Division','SFDC_Sub_Division','Level'],
                        value_vars=Quota_assignment_col, var_name='Period',value_name='Quota')
+        Territory_Quota['Measure'] = Territory_Quota.Period.str[3:]
         Territory_Quota['Period'] = Territory_Quota.Period.str[0:2]
         Territory_Quota['Year'] = 'FY21'
        
@@ -324,6 +332,10 @@ def get_anaplan_quota (refresh=1):
     
     return output
 
+
+
+
+''' Retired function
 #===============================================================================
 # Read SFDC Opportunity Data
 #===============================================================================
@@ -433,7 +445,6 @@ def get_Period_map(refresh = 1):
     return (temp)
 
 
-''' Retired function
 #===============================================================================
 # Read Quota data from the Quota Master Spreadsheet
 #===============================================================================

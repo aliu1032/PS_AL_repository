@@ -74,27 +74,85 @@ TempCov1 (OpportunityId, Temp_CoveredBy_Name, Temp_CoveredBy_EmployeeId, Max_rnk
 			where [Row Number] = 1
 ),
 
-/* Geo Annual Quota */
-#Geo_Annual_Quota as (
-	select Territory_ID, [Year], [Period], Level, cast(Quota as decimal(18,2)) Quota
+
+#Geo_M1_Quota as (
+	select Territory_ID, [Year], [Period], Level, cast(Quota as decimal(18,2)) Quota, District, Region, Theater Geo, Super_Region,
+	case when Period in ('Q1','Q2') then '1H' 
+	     when Period in ('Q3','Q4') then '2H'
+	end [Half_Period]
 	from SalesOps_DM.dbo.Territory_Quota
-	where Period = 'FY'
+	where Measure = 'M1_Quota'
+	),
+#Geo_FB_Quota as (
+	select Territory_ID, [Year], [Period], Level, cast(Quota as decimal(18,2)) Quota, District, Region, Theater Geo, Super_Region,
+	case when Period in ('Q1','Q2') then '1H' 
+	     when Period in ('Q3','Q4') then '2H'
+	end [Half_Period]
+	from SalesOps_DM.dbo.Territory_Quota
+	where Measure = 'FB_Quota'
 	),
 
-/* Geo Half Year Quota */
-#Geo_Half_Quota as (
-	select Territory_ID, [Year], [Period], Level, cast(Quota as decimal(18,2)) Quota
-	from SalesOps_DM.dbo.Territory_Quota
-	where Period in ('1H','2H')
+#Geo_Quota as (
+Select #Geo_M1_Quota.[Year], #Geo_M1_Quota.Period, #Geo_M1_Quota.Half_Period, #Geo_M1_Quota.Geo, #Geo_M1_Quota.Super_Region, #Geo_M1_Quota.Region, #Geo_M1_Quota.District,
+#Geo_M1_Quota.Level, #Geo_M1_Quota.Territory_ID, #Geo_M1_Quota.Quota [M1_Quota], #Geo_FB_Quota.Quota [FB_Quota]
+from #Geo_M1_Quota
+left join #Geo_FB_Quota on #Geo_M1_Quota.Territory_ID = #Geo_FB_Quota.Territory_ID and #Geo_M1_Quota.Period = #Geo_FB_Quota.Period
+),
+
+#Geo_Quota_Wide as (
+		Select R.Territory_ID, DQ.[Year], DQ.Period, DQ.Geo, DQ.Super_Region, DQ.Region, DQ.District
+			, DQ.District_Qtrly_Quota, DQ.District_Qtrly_FB_Quota, DH.District_Half_Quota, DH.District_Half_FB_Quota, DA.District_Annual_Quota, DA.District_Annual_FB_Quota
+			, RQ.Region_Qtrly_Quota, RQ.Region_Qtrly_FB_Quota, RH.Region_Half_Quota, RH.Region_Half_FB_Quota, RA.Region_Annual_Quota, RA.Region_Annual_FB_Quota
+			, SRQ.SuperRegion_Qtrly_Quota, SRQ.SuperRegion_Qtrly_FB_Quota, SRH.SuperRegion_Half_Quota, SRH.SuperRegion_Half_FB_Quota, SRA.SuperRegion_Annual_Quota, SRA.SuperRegion_Annual_FB_Quota
+			, GQ.Geo_Qtrly_Quota, GQ.Geo_Qtrly_FB_Quota, GH.Geo_Half_Quota, GH.Geo_Half_FB_Quota, GA.Geo_Annual_Quota, GA.Geo_Annual_FB_Quota
+
+		from (Select distinct(Territory_ID) from SalesOps_DM.dbo.Territory_Quota where Level = 'Territory' and Period = 'FY') R
+		left join (Select Territory_ID, [Year], Period, Half_Period, Geo, Super_Region, Region, District,
+				   M1_Quota [District_Qtrly_Quota], FB_Quota [District_Qtrly_FB_Quota] from #Geo_Quota where Level = 'District' and Period in ('Q1','Q2','Q3','Q4'))
+				   DQ on DQ.Territory_ID = substring(R.Territory_ID, 1, 18)
+		left join (Select Territory_ID, Period, M1_Quota [District_Half_Quota], FB_Quota [District_Half_FB_Quota] from #Geo_Quota where Level = 'District' and Period in ('1H','2H'))
+				   DH on DH.Territory_ID = substring(R.Territory_ID, 1, 18) and DH.Period = DQ.Half_Period
+		left join (Select Territory_ID, M1_Quota [District_Annual_Quota], FB_Quota [District_Annual_FB_Quota] from #Geo_Quota where Level = 'District' and Period in ('FY'))
+				   DA on DA.Territory_ID = substring(R.Territory_ID, 1, 18)
+
+		left join (Select Territory_ID, Period, M1_Quota [Region_Qtrly_Quota], FB_Quota [Region_Qtrly_FB_Quota] from #Geo_Quota where Level = 'Region' and Period in ('Q1','Q2','Q3','Q4'))
+				   RQ on RQ.Territory_ID = left(R.Territory_ID, 14) and RQ.Period = DQ.Period
+		left join (Select Territory_ID, Period, M1_Quota [Region_Half_Quota], FB_Quota [Region_Half_FB_Quota] from #Geo_Quota where Level = 'Region' and Period in ('1H','2H'))
+				   RH on RH.Territory_ID = left(R.Territory_ID, 14) and RH.Period = DQ.Half_Period
+		left join (Select Territory_ID, Period, M1_Quota [Region_Annual_Quota], FB_Quota [Region_Annual_FB_Quota] from #Geo_Quota where Level = 'Region' and Period in ('FY'))
+				   RA on RA.Territory_ID = left(R.Territory_ID, 14)
+
+		left join (Select Territory_ID, Period, M1_Quota [SuperRegion_Qtrly_Quota], FB_Quota [SuperRegion_Qtrly_FB_Quota] from #Geo_Quota where Level = 'Super-Region' and Period in ('Q1','Q2','Q3','Q4'))
+				   SRQ on SRQ.Territory_ID = left(R.Territory_ID, 10) and SRQ.Period = DQ.Period
+		left join (Select Territory_ID, Period, M1_Quota [SuperRegion_Half_Quota], FB_Quota [SuperRegion_Half_FB_Quota] from #Geo_Quota where Level = 'Super-Region' and Period in ('1H','2H'))
+				   SRH on SRH.Territory_ID = left(R.Territory_ID, 10) and SRH.Period = DQ.Half_Period
+		left join (Select Territory_ID, Period, M1_Quota [SuperRegion_Annual_Quota], FB_Quota [SuperRegion_Annual_FB_Quota] from #Geo_Quota where Level = 'Super-Region' and Period in ('FY'))
+				   SRA on SRA.Territory_ID = left(R.Territory_ID, 10)
+
+		left join (Select Territory_ID, Period, M1_Quota [Geo_Qtrly_Quota], FB_Quota [Geo_Qtrly_FB_Quota] from #Geo_Quota where Level = 'Theater' and Period in ('Q1','Q2','Q3','Q4'))
+				   GQ on GQ.Territory_ID = left(R.Territory_ID, 6) and GQ.Period = DQ.Period
+		left join (Select Territory_ID, Period, M1_Quota [Geo_Half_Quota], FB_Quota [Geo_Half_FB_Quota] from #Geo_Quota where Level = 'Theater' and Period in ('1H','2H'))
+				   GH on GH.Territory_ID = left(R.Territory_ID, 6) and GH.Period = DQ.Half_Period
+		left join (Select Territory_ID, Period, M1_Quota [Geo_Annual_Quota], FB_Quota [Geo_Annual_FB_Quota] from #Geo_Quota where Level = 'Theater' and Period in ('FY'))
+				   GA on GA.Territory_ID = left(R.Territory_ID, 6)
+		),
+
+#SE_M1_Quota as (
+	select Name, EmployeeID, [Year], [Period], cast(Quota as decimal(18,2)) Quota
+	from SalesOps_DM.dbo.SE_Org_Quota
+	where Measure = 'M1'
 	),
-	
-/* Geo Half Year Quota */
-#Geo_Qtrly_Quota as (
-	select Territory_ID, [Year], [Period], Level, cast(Quota as decimal(18,2)) Quota, District, Region, Theater Geo, Super_Region
-	from SalesOps_DM.dbo.Territory_Quota
-	where Period in ('Q1','Q2','Q3','Q4')
+#SE_M2_Quota as (
+	select Name, EmployeeID, [Year], [Period], cast(Quota as decimal(18,2)) Quota
+	from SalesOps_DM.dbo.SE_Org_Quota
+	where Measure = 'M2'
 	),
 
+#SE_Quota as (
+	select #SE_M1_Quota.EmployeeID, #SE_M1_Quota.[Year], #SE_M1_Quota.Period, #SE_M1_Quota.Quota [SE_Quota], #SE_M2_Quota.Quota [FB_Quota]
+	from #SE_M1_Quota
+	left join #SE_M2_Quota on #SE_M1_Quota.EmployeeID = #SE_M2_Quota.EmployeeID and #SE_M1_Quota.Period = #SE_M2_Quota.Period
+),
 
 #AE_Coverage as (
 		select Name, EmployeeID, Territory_ID from (
@@ -201,13 +259,20 @@ select a.*
 	
 	  
 	/***** file only have current year quota, need to check the logic, attainment calculation have issues */  
-	, SE_Quota.Quota Quota
-	, SE_Half_Quota.Quota SE_Half_Quota
-	, SE_Annual_Quota.Quota SE_Annual_Quota
+	, SE_Quota.SE_Quota Quota
+	, SE_Half_Quota.SE_Quota SE_Half_Quota
+	, SE_Annual_Quota.SE_Quota SE_Annual_Quota
 	
-	, District_Quota.Quota [District Quota]
-	, District_Half_Quota.Quota [District Half Quota]
-	, District_Annual_Quota.Quota [District Annual Quota]
+	, SE_Quota.FB_Quota FB_Quota
+	, SE_Half_Quota.FB_Quota SE_Half_FB_Quota
+	, SE_Annual_Quota.FB_Quota SE_Annual_FB_Quota
+
+	, Geo_Quota.District_Qtrly_Quota [District Quota]
+	, Geo_Quota.District_Half_Quota [District Half Quota]
+	, Geo_Quota.District_Annual_Quota [District Annual Quota]
+
+--				, DQ.District_Qtrly_Quota, DQ.District_Qtrly_FB_Quota, DH.District_Half_Quota, DH.District_Half_FB_Quota, DA.District_Annual_Quota, DA.District_Annual_FB_Quota
+
 	
 	/* populate empty SE_Oppt_Owner_EmployeeID with Opportunity-Sub_Division such that the deal are pulled into the user Tableau view,
      * in tableau, allow a user to see opportunity that is owned by his/her subordinate or is fall into the sub-division where he/she have access */
@@ -407,15 +472,15 @@ select a.*
 		left join #TempCov on #TempCov.OpportunityId = Oppt.Id
 		left join #OpptHist on #OpptHist.OpportunityId = Oppt.Id		
 	) a
-left join SalesOps_DM.dbo.SE_Org_Quota SE_Quota on (SE_Quota.EmployeeID = a.SE_Oppt_Owner_EmployeeNumber and SE_Quota.Period = substring(a.[Close Quarter], 6,2) and SE_Quota.[Year] = a.[Close Year])
-left join SalesOps_DM.dbo.SE_Org_Quota SE_Half_Quota on (SE_Half_Quota.EmployeeID = a.SE_Oppt_Owner_EmployeeNumber and SE_Half_Quota.Period = substring(a.[Close Semi Year], 6, 2) and SE_Quota.Year = a.[Close Year])
-left join SalesOps_DM.dbo.SE_Org_Quota SE_Annual_Quota on (SE_Annual_Quota.EmployeeID = a.SE_Oppt_Owner_EmployeeNumber and SE_Annual_Quota.Period = 'FY' and SE_Quota.Year = a.[Close Year])
-left join #Geo_Qtrly_Quota District_Quota on (a.AE_District_Territory_ID = District_Quota.Territory_ID and District_Quota.Period = substring(a.[Close Quarter], 6,2) and District_Quota.[Year] = a.[Close Year])
-left join #Geo_Half_Quota District_Half_Quota on (a.AE_District_Territory_ID = District_Half_Quota.Territory_ID and District_Half_Quota.Period = substring(a.[Close Quarter], 6,2) and District_Quota.[Year] = a.[Close Year])
-left join #Geo_Annual_Quota District_Annual_Quota on (a.AE_District_Territory_ID = District_Annual_Quota.Territory_ID and District_Annual_Quota.Period = substring(a.[Close Quarter], 6,2) and District_Quota.[Year] = a.[Close Year])
+
+left join #Geo_Quota_Wide Geo_Quota on (a.Acct_Exec_Territory_ID = Geo_Quota.Territory_ID and Geo_Quota.Period = substring(a.[Close Quarter], 6,2) and GEO_Quota.[Year] = a.[Close Year])
+
+left join #SE_Quota SE_Quota on (SE_Quota.EmployeeID = a.SE_Oppt_Owner_EmployeeNumber and SE_Quota.Period = substring(a.[Close Quarter], 6,2) and SE_Quota.[Year] = a.[Close Year])
+left join #SE_Quota SE_Half_Quota on (SE_Half_Quota.EmployeeID = a.SE_Oppt_Owner_EmployeeNumber and SE_Half_Quota.Period = substring(a.[Close Semi Year], 6,2) and SE_Half_Quota.[Year] = a.[Close Year])
+left join #SE_Quota SE_Annual_Quota on (SE_Annual_Quota.EmployeeID = a.SE_Oppt_Owner_EmployeeNumber and SE_Annual_Quota.[Year] = a.[Close Year] and SE_Annual_Quota.Period = 'FY')
 
 
-where a.Id in ('0060z000021vldpAAA','0060z000021z6pEAAQ','0060z00001xjvTsAAI','0060z00001zjsWBAAY')
+-- where a.Id in ('0060z000021vldpAAA','0060z000021z6pEAAQ','0060z00001xjvTsAAI','0060z00001zjsWBAAY') -- Patrick H issue
 --where Sub_Division like 'ISO%'
 --where a.SE_Oppt_Owner = 'Felipe Bedulli'
 --where a.Id like '0060z00001xXD9SAAW%'
