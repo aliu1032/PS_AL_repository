@@ -16,9 +16,9 @@ import pyodbc
 from sqlalchemy import create_engine
 from sqlalchemy import types as sqlalchemy_types
 
-server = 'ALIU-X1'
-database = 'ALIU_DB1'
-conn_str = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') 
+#server = 'ALIU-X1'
+#database = 'ALIU_DB1'
+#conn_str = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') 
 
 '''
 cnxn = pyodbc.connect('DSN=ALIU-X1; Trust_Connection = yes',DRIVER='{ODBC Driver 13 for SQL Server}', SERVER='ALIU-X1', Database='ALIU_DB1')
@@ -31,7 +31,7 @@ db_columns_types = pd.read_excel(cfg.sup_folder + supplment, sheet_name = 'Outpu
 #===============================================================================
 # Read the Territory ID master
 #===============================================================================
-from getData import get_TerritoryID_Master
+from getDataFY22 import get_TerritoryID_Master
 TerritoryID_Master = get_TerritoryID_Master(1)
 
 #===============================================================================
@@ -39,8 +39,22 @@ TerritoryID_Master = get_TerritoryID_Master(1)
 # SE has a $ quota per month, quarter each year (regardless number of territory he/she cover
 # A SE may be assigned to 1 or N Territories
 #===============================================================================
-from getData import get_anaplan_quota
+from getDataFY22 import get_anaplan_quota
 quota_master = get_anaplan_quota(1)
+
+
+server = 'ALIU-X1'
+database = 'ALIU_DB1'
+conn_str_local = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') 
+quota_master.to_sql('Anaplan_Employee_Quota', con=conn_str_local, if_exists='replace', schema="dbo", index=False)
+
+
+
+server = 'PS-SQL-Dev02'
+database = 'SalesOps_DM'
+conn_str = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') 
+quota_master.to_sql('Anaplan_Employee_Quota', con=conn_str, if_exists='replace', schema="dbo", index=False)
+
 
 #------------------------------------------------------------------------------ 
 # Create report to show the Quota assignment , SE to AE mapping, using Anaplan coverage information
@@ -53,12 +67,13 @@ quota_master = get_anaplan_quota(1)
 
 # Read the territory assignment from Anaplan 
 # Quota_assignement_W is by Name   -- FY21 has only onboarded rep. 'HC_Status', 
-Territory_assignment_W = quota_master[['Name', 'Title','Resource_Group','EmployeeID','SFDC_UserID', 'Email','Manager','Manager_EmployeeID','Territory_IDs', 'Segments']].copy()
-Territory_assignment_W.Territory_IDs.fillna("", inplace=True)
+#Territory_assignment_W = quota_master[['Name', 'Title','Resource_Group','EmployeeID','SFDC_UserID', 'Email','Manager','Manager_EmployeeID','M1_Territory_IDs', 'M1_Segments']].copy()
+Territory_assignment_W = quota_master[['Name','EmployeeID','M1_Territory_IDs', 'M1_Segments']].copy()
+Territory_assignment_W.M1_Territory_IDs.fillna("", inplace=True)
 len_header = len(Territory_assignment_W.columns)
 
 # for user who carry quota for multiple territories, Split the multiple territory coverage into columns
-temp = Territory_assignment_W['Territory_IDs'].str.split(',', expand=True)
+temp = Territory_assignment_W['M1_Territory_IDs'].str.split(',', expand=True)
 Territory_assignment_W = pd.merge(Territory_assignment_W, temp, how='left', left_index=True, right_index=True)
 
 Territory_assignment_col = Territory_assignment_W.columns[len_header:]
@@ -66,9 +81,22 @@ for i in Territory_assignment_col:
     Territory_assignment_W[i] = Territory_assignment_W[i].str.strip()
 
 # Un-pivot the Territory IDs
-Territory_assignment_L = pd.melt(Territory_assignment_W, id_vars=['Name','Title','Resource_Group','EmployeeID','SFDC_UserID', 'Email', 'Manager','Manager_EmployeeID','Territory_IDs','Segments'],\
+Territory_assignment_W.fillna('',inplace=True)
+Territory_assignment_L = pd.melt(Territory_assignment_W, id_vars=['Name','EmployeeID','M1_Territory_IDs', 'M1_Segments'],\
                             value_vars = Territory_assignment_col, var_name = 'Territory_assignment', value_name = 'Territory_ID')
-Territory_assignment_L = Territory_assignment_L[~(Territory_assignment_L.Territory_ID.isnull())] #clean the null data
+Territory_assignment_L = Territory_assignment_L[(~(Territory_assignment_L.Territory_ID.isnull())) & (Territory_assignment_L.Territory_ID!='')].reindex() #clean the null data
+
+Territory_assignment_L.rename(columns = {'M1_Territory_IDs' : 'Territory_IDs',
+                                         'M1_Segments' : 'Segments'},
+                                         inplace = True)
+
+
+#Territory_assignment_L = pd.melt(Territory_assignment_W, id_vars=['Name','Title','Resource_Group','EmployeeID','SFDC_UserID', 'Email', 'Manager','Manager_EmployeeID','Territory_IDs','Segments'],\
+#                            value_vars = Territory_assignment_col, var_name = 'Territory_assignment', value_name = 'Territory_ID')
+ #'Arian Bexheti'
+
+sel_col = ['Title','Resource_Group','EmployeeID','Email','Manager','Manager_EmployeeID', 'SFDC_UserID']
+Territory_assignment_L = pd.merge(Territory_assignment_L, quota_master[sel_col], how = 'left', on='EmployeeID')
 
 sel_col = ['Short_Description','Territory_ID','Level','Hierarchy','Theater','Super_Region','Region','Territory','District','Segment','Type',
             'SFDC_Theater','SFDC_Division','SFDC_Sub_Division']
@@ -105,7 +133,8 @@ data_type={}
 for i in range(0,len(to_sql_type.Columns)):
     data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
                   
-Territory_assignment_L.to_sql('Territory_assignment_byName_FY21', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+Territory_assignment_L.to_sql('Territory_assignment_byName_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+###Territory_assignment_L.to_sql('Territory_assignment_byName', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
 
 #------------------------------------------------------------------------------ 
 # Theoretically,
@@ -154,9 +183,10 @@ sel_col = ['Name', 'Title', 'Resource_Group', 'EmployeeID', 'SFDC_UserID', 'Emai
            'SFDC_Theater', 'SFDC_Division','SFDC_Sub_Division']
 
 Coverage_assignment_L = Territory_assignment_L[sel_col].copy()
-Coverage_assignment_L = Coverage_assignment_L[(Coverage_assignment_L.Name.str.match('^[a-zA-Z]')) & ~(Coverage_assignment_L.Name.str.startswith('SR-'))]
+Coverage_assignment_L = Coverage_assignment_L[(Coverage_assignment_L.Name.str.match('^[a-zA-Z]')) & ~(Coverage_assignment_L.Name.str.startswith('SR-')) &\
+                                              (Coverage_assignment_L.Territory_ID != '') & ~(Coverage_assignment_L.Territory_ID.isna())]
 
-No_assignment = Coverage_assignment_L[Coverage_assignment_L.Territory_ID.isna()]
+#No_assignment = Coverage_assignment_L[Coverage_assignment_L.Territory_ID.isna()]
 
 ### issue: computer cannot tell whether a SE is truly covering the entire district or put on a district during AE/SE ramp up period.
 # replace SE assignment for those who is not carrying a territory quota, resolve the region/district into territories
@@ -188,12 +218,15 @@ Coverage_assignment_L = Coverage_assignment_L.append(temp2[sel_col], sort="False
 # the Territories roll into multiple Region/District
 
 temp_ISO = Territory_assignment_L[Territory_assignment_L.Name =='Dean Brady'][sel_col]
+temp_ISO['Territory_ID_A'] = temp_ISO['Territory_ID'].str[:18]
 temp_ISO2 = pd.pivot_table(temp_ISO, index=['Name', 'Title', 'Resource_Group', 'EmployeeID', 'SFDC_UserID', 'Email',
            'Manager', 'Manager_EmployeeID','Territory_IDs','Segments',
-           'Hierarchy', 'Theater', 'Super_Region', 'Region', 'District',
+           'Hierarchy', 'Theater', 'Super_Region', 'Region', 'District','Territory_ID_A',
            'SFDC_Theater', 'SFDC_Division','SFDC_Sub_Division',], values=['Territory_ID'], aggfunc='count')
 temp_ISO2.reset_index(inplace=True)
 temp_ISO2['Level'] = 'District'
+temp_ISO2['Territory_ID'] = temp_ISO2['Territory_ID_A']
+temp_ISO2.drop(['Territory_ID_A'], axis=1, inplace=True)
 
 Coverage_assignment_L = Coverage_assignment_L.append(temp_ISO2, sort="False")
 
@@ -206,7 +239,8 @@ data_type={}
 for i in range(0,len(to_sql_type.Columns)):
     data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
 
-Coverage_assignment_L.to_sql('Coverage_assignment_byName_FY21', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+Coverage_assignment_L.to_sql('Coverage_assignment_byName_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+###Coverage_assignment_L.to_sql('Coverage_assignment_byName', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
 
 ''''''
 
@@ -230,7 +264,8 @@ check_dup = SE_org_coverage.duplicated(subset=['Territory_ID', 'Name'])
 temp = SE_org_coverage.pivot(index = 'Territory_ID', columns = 'Name')
 temp = SE_org_coverage.pivot(index = 'Territory_ID', columns = 'Resource_Group', values='Name')
 '''
-
+#### 
+#Coverage_assignment_W = Coverage_assignment_W.reset_index()
 Coverage_assignment_W = Coverage_assignment_W[['AE Name','SE Name', 'AE Email', 'SE Email', 'SE EmployeeID', 'SE SFDC_UserID']].reset_index()
 Coverage_assignment_W.rename(columns = {'AE Name' : 'Acct_Exec',
                                         'AE Email' : 'Acct_Exec_Email',
@@ -259,7 +294,8 @@ for i in Coverage_assignment_W.columns:
 #Coverage_assignment_W.replace([np.nan], None, inplace=True)
 #Coverage_assignment_W = Coverage_assignment_W.where(pd.notnull(Coverage_assignment_W),None)
 
-Coverage_assignment_W.to_sql('Coverage_assignment_byTerritory_FY21', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+Coverage_assignment_W.to_sql('Coverage_assignment_byTerritory_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+###Coverage_assignment_W.to_sql('Coverage_assignment_byTerritory', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
 
 
 #------------------------------------------------------------------------------ 
@@ -276,43 +312,77 @@ Coverage_assignment_W.to_sql('Coverage_assignment_byTerritory_FY21', con=conn_st
 # reading from Anaplan data dump
 #quota_master[(quota_master.Resource_Group.isin(['SE','SEM','SE Director','SE AVP']))]
 ###### read the Theater etc description from Territory Master
-SE_quota_W = quota_master[(quota_master.Job_Family == 'Systems Engineering') | (quota_master.Job_Family == 'System Engineering')]\
-             [['Name', 'Territory_IDs', 'EmployeeID', 'SFDC_UserID', 'Email', 'Year', 
-               'Resource_Group', 'M1_Theater','M1_Super_Region','M1_Region','M1_District','Segments', 
+#[(quota_master.Job_Family == 'Systems Engineering') | (quota_master.Job_Family == 'System Engineering')]\
+SE_quota_W = quota_master[['Name', 'M1_Territory_IDs','M1_Segments', 'EmployeeID', 'SFDC_UserID', 'Email', 'Year', 
+               'Resource_Group', 'M1_Theater','M1_Super_Region','M1_Region','M1_District', 
                'M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned',
-               'M2_Q1_Quota_Assigned', 'M2_Q2_Quota_Assigned', 'M2_Q3_Quota_Assigned', 'M2_Q4_Quota_Assigned']]
+               'M1_Weight', 'M1_FY_BCR_Quota']].copy()
 
 ## calculate the 1H, 2H and Annual quota
 SE_quota_W['M1_1H'] = SE_quota_W['M1_Q1_Quota_Assigned'] + SE_quota_W['M1_Q2_Quota_Assigned']
 SE_quota_W['M1_2H'] = SE_quota_W['M1_Q3_Quota_Assigned'] + SE_quota_W['M1_Q4_Quota_Assigned']
 SE_quota_W['M1_FY'] = SE_quota_W['M1_Q1_Quota_Assigned'] + SE_quota_W['M1_Q2_Quota_Assigned'] + SE_quota_W['M1_Q3_Quota_Assigned'] + SE_quota_W['M1_Q4_Quota_Assigned']
 
-SE_quota_W['M2_1H'] = SE_quota_W['M2_Q1_Quota_Assigned'] + SE_quota_W['M2_Q2_Quota_Assigned']
-SE_quota_W['M2_2H'] = SE_quota_W['M2_Q3_Quota_Assigned'] + SE_quota_W['M2_Q4_Quota_Assigned']
-SE_quota_W['M2_FY'] = SE_quota_W['M2_Q1_Quota_Assigned'] + SE_quota_W['M2_Q2_Quota_Assigned'] + SE_quota_W['M2_Q3_Quota_Assigned'] + SE_quota_W['M2_Q4_Quota_Assigned']
 
 # Un-pivot the SE quota information
-SE_quota_L = pd.melt(SE_quota_W, id_vars=['Name', 'Territory_IDs', 'EmployeeID', 'SFDC_UserID', 'Email', 'Year',
-                                          'Resource_Group','M1_Theater','M1_Super_Region','M1_Region','M1_District','M1_Segment'],
-                     value_vars = ['M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned', 'M1_1H','M1_2H','M1_FY',
-                                   'M2_Q1_Quota_Assigned', 'M2_Q2_Quota_Assigned', 'M2_Q3_Quota_Assigned', 'M2_Q4_Quota_Assigned', 'M2_1H','M2_2H','M2_FY'],
-                     var_name = 'Period', value_name = 'Quota')
+SE_quota_L = pd.melt(SE_quota_W, id_vars=['Name', 'M1_Territory_IDs', 'EmployeeID', 'SFDC_UserID', 'Email', 'Year',
+                                          'Resource_Group','M1_Theater','M1_Super_Region','M1_Region','M1_District','M1_Segments', 'M1_Weight','M1_FY_BCR_Quota'],
+                     value_vars = ['M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned', 'M1_1H','M1_2H','M1_FY'],
+                     var_name = 'Period', value_name = 'Quota').reindex()
 
 
-rename_column = { 'M1_Theater' : 'Theater',
+rename_column = { 'M1_Territory_IDs' : 'Territory_IDs',
+                  'M1_Theater' : 'Theater',
                   'M1_Super_Region' : 'Super_Region',
                   'M1_Region' : 'Region',
                   'M1_District' : 'District',
-                  'M1_Segment' : 'Segment'}
+                  'M1_Segments' : 'Segments',
+                  'M1_Weight' : 'Weight',
+                  'M1_FY_BCR_Quota' : 'FY_BCR_Quota'}
 
 SE_quota_L.rename(columns=rename_column, inplace=True)
 
-relabel_quarters = ['M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned', 'M1_1H','M1_2H','M1_FY',
-                    'M2_Q1_Quota_Assigned', 'M2_Q2_Quota_Assigned', 'M2_Q3_Quota_Assigned', 'M2_Q4_Quota_Assigned', 'M2_1H','M2_2H','M2_FY']
+relabel_quarters = ['M1_Q1_Quota_Assigned', 'M1_Q2_Quota_Assigned', 'M1_Q3_Quota_Assigned', 'M1_Q4_Quota_Assigned', 'M1_1H','M1_2H','M1_FY']
 
 for i in relabel_quarters:
     SE_quota_L.loc[SE_quota_L.Period == i, 'Measure'] = i[:2]
     SE_quota_L.loc[SE_quota_L.Period == i, 'Period'] = i[3:5]
+
+## reshape M2 
+SE_quota_W_M2 = quota_master[['Name', 'M2_Territory_IDs', 'M2_Segments', 'EmployeeID', 'SFDC_UserID', 'Email', 'Year', 
+               'Resource_Group', 'M2_Theater','M2_Super_Region','M2_Region','M2_District',
+               'M2_Q1_Quota_Assigned', 'M2_Q2_Quota_Assigned', 'M2_Q3_Quota_Assigned', 'M2_Q4_Quota_Assigned',
+               'M2_Weight','M2_FY_BCR_Quota']].copy()
+
+SE_quota_W_M2['M2_1H'] = SE_quota_W_M2['M2_Q1_Quota_Assigned'] + SE_quota_W_M2['M2_Q2_Quota_Assigned']
+SE_quota_W_M2['M2_2H'] = SE_quota_W_M2['M2_Q3_Quota_Assigned'] + SE_quota_W_M2['M2_Q4_Quota_Assigned']
+SE_quota_W_M2['M2_FY'] = SE_quota_W_M2['M2_Q1_Quota_Assigned'] + SE_quota_W_M2['M2_Q2_Quota_Assigned'] + SE_quota_W_M2['M2_Q3_Quota_Assigned'] + SE_quota_W_M2['M2_Q4_Quota_Assigned']
+
+# Un-pivot the SE quota information
+SE_quota_L_M2 = pd.melt(SE_quota_W_M2, id_vars=['Name', 'M2_Territory_IDs', 'EmployeeID', 'SFDC_UserID', 'Email', 'Year',
+                                          'Resource_Group','M2_Theater','M2_Super_Region','M2_Region','M2_District','M2_Segments', 'M2_Weight','M2_FY_BCR_Quota'],
+                     value_vars = ['M2_Q1_Quota_Assigned', 'M2_Q2_Quota_Assigned', 'M2_Q3_Quota_Assigned', 'M2_Q4_Quota_Assigned', 'M2_1H','M2_2H','M2_FY'],
+                     var_name = 'Period', value_name = 'Quota').reindex()
+
+rename_column = { 'M2_Territory_IDs' : 'Territory_IDs',
+                  'M2_Theater' : 'Theater',
+                  'M2_Super_Region' : 'Super_Region',
+                  'M2_Region' : 'Region',
+                  'M2_District' : 'District',
+                  'M2_Segments' : 'Segments',
+                  'M2_Weight' : 'Weight',
+                  'M2_FY_BCR_Quota' : 'FY_BCR_Quota'}
+
+SE_quota_L_M2.rename(columns=rename_column, inplace=True)
+
+relabel_quarters = ['M2_Q1_Quota_Assigned', 'M2_Q2_Quota_Assigned', 'M2_Q3_Quota_Assigned', 'M2_Q4_Quota_Assigned', 'M2_1H','M2_2H','M2_FY']
+
+for i in relabel_quarters:
+    SE_quota_L_M2.loc[SE_quota_L_M2.Period == i, 'Measure'] = i[:2]
+    SE_quota_L_M2.loc[SE_quota_L_M2.Period == i, 'Period'] = i[3:5]
+
+SE_quota_L = SE_quota_L.append(SE_quota_L_M2, ignore_index=True, sort=False)
+
 
 #SE_quota_L.to_csv(cfg.output_folder+'SE_Quota.txt', sep="|", index=False)
 to_sql_type = db_columns_types[db_columns_types.DB_TableName == 'SE_Org_Quota']
@@ -328,7 +398,8 @@ for i in list(SE_quota_L.columns[:-3]):
     print (i + '  : ' + str(j))    
 '''    
 
-SE_quota_L.to_sql('SE_Org_Quota_FY21', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+SE_quota_L.to_sql('SE_Org_Quota_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+###SE_quota_L.to_sql('SE_Org_Quota', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
 
 ''' 
 ## dont' have the permission to drop table
@@ -339,7 +410,7 @@ conn_str1 = create_engine('mssql+pyodbc://@' + server1 + '/' + database1 + '?dri
 SE_quota_L.to_sql('SE_Org_Quota', con=conn_str1, if_exists='replace', schema="dbo", index=False, dtype = data_type)
 '''
 
-
+'''
 #----------------------------------------------------------------------------------------------------- 
 # Construct a list of District where a User have view permission
 # for SE, Specialist (the leaves of SE org), assign District permission based on one's Territory assignment
@@ -352,8 +423,10 @@ SE_quota_L.to_sql('SE_Org_Quota', con=conn_str1, if_exists='replace', schema="db
 # Initialize the dataframe
 District_Permission = pd.DataFrame(columns = ['Name','Email','EmployeeID', 'SFDC_UserID','Resource_Group','Territory_ID','Manager', 'Manager_EmployeeID'])
 
+
 # Step 1: SEs, Specialists - provide permission to the district in his/her assigned territories
-Users_need_access = list(dict.fromkeys(Coverage_assignment_L[(Coverage_assignment_L.Resource_Group.isin(['SE', 'FSA', 'CTM', 'PSE'])) &\
+# 'SM', 'SA', 'CTD'
+Users_need_access = list(dict.fromkeys(Coverage_assignment_L[(Coverage_assignment_L.Resource_Group.isin(['SE', 'PSE', 'FSA', 'CTM', 'NPTM'])) &\
                                                                                    (Coverage_assignment_L.Territory_ID != '') \
                                                                                    ]['Name']
                                                                                    ))
@@ -376,7 +449,7 @@ for i in Users_need_access:
 District_Permission.drop_duplicates(subset=['SFDC_UserID', 'Territory_ID'], keep='first', inplace=True)
 
 # Step 2: Give SEM, Director & VP access to districts derived from their sub-ordinate
-Resource_List = ['SE', 'SEM', 'SE Director', 'SA Director']
+Resource_List = ['SE', 'SEM', 'SEL']
 for x in Resource_List:
     Manager_list = list(dict.fromkeys(District_Permission[District_Permission.Resource_Group==x]['Manager_EmployeeID']))
     for y in Manager_list:
@@ -422,8 +495,11 @@ data_type={}
 for i in range(0,len(to_sql_type.Columns)):
     data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
 
-District_Permission.to_sql('SE_District_Permission_FY21', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
-                     
+District_Permission.to_sql('SE_District_Permission_FY21', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+'''
+
+'''
+# not do a sub division 6/15/2020                   
 #------------------------------------------------------------------------------ 
 # Create a report on SE assignment w.r.t SFDC sub-division 
 # This is use to manage row visibility in Tableau. SFDC visibility is based on the Sub-division, (and add the Territory ID for SEs)
@@ -444,8 +520,8 @@ District_Permission.to_sql('SE_District_Permission_FY21', con=conn_str, if_exist
 SubDivision_Permission = pd.DataFrame(columns = ['Name','Email','EmployeeID','SFDC_UserID','Resource_Group','Sub_Division','Manager','Manager_EmployeeID'])
 
 
-# Step 1: SEs, Specialists - provide permission to the district in his/her assigned territories
-Users_need_access = list(dict.fromkeys(Coverage_assignment_L[(Coverage_assignment_L.Resource_Group.isin(['SE', 'FSA', 'CTM', 'PSE'])) &\
+# Step 1: SEs, Specialists - provide permission to the district in his/her assigned territories -- PSE
+Users_need_access = list(dict.fromkeys(Coverage_assignment_L[(Coverage_assignment_L.Resource_Group.isin(['SE','SEM'])) &\
                                                                                    (Coverage_assignment_L.Territory_ID != '') \
                                                                                    ]['Name']
                                                                                    ))
@@ -454,13 +530,13 @@ for i in Users_need_access:
     
     for j in User_assigned_coverage:
         # find the Sub_Division(s) associated with user's covered Territory
-        Sub_Division_List = pd.DataFrame(list(TerritoryID_Master[TerritoryID_Master.Territory_ID.str.startswith(j)]['SFDC_Sub_Division'])
+        Sub_Division_List = pd.DataFrame(list(TerritoryID_Master[TerritoryID_Master.Territory_ID.str.startswith(j, na=False)]['SFDC_Sub_Division'])
                                     , columns=['Sub_Division'])
         # if the assigned territory is not mapped to a sub division value, then it is null
-        '''if len(Sub_Division_List) == 0 :
+        if len(Sub_Division_List) == 0 :
             for x in User_assigned_coverage:
-                Coverage_List = Coverage_List.append({'SFDC_Sub_Division':Quota_assignment_L[Quota_assignment_L.Name==j]['SFDC_Sub_Division']}, ignore_index=True)
-        '''    
+                Coverage_List = Coverage_List.append({'SFDC_Sub_Division':Territory_assignment_L[Territory_assignment_L.Name==i]['SFDC_Sub_Division']}, ignore_index=True)
+            
         temp = pd.concat([Territory_assignment_W.loc[Territory_assignment_W.Name==i,['Name','Email','EmployeeID','SFDC_UserID','Resource_Group','Manager', 'Manager_EmployeeID']]]*(len(Sub_Division_List)), ignore_index=True)
         temp = pd.concat([temp, Sub_Division_List], axis=1)      
         SubDivision_Permission = SubDivision_Permission.append(temp, sort=False)
@@ -469,7 +545,7 @@ SubDivision_Permission = SubDivision_Permission[~SubDivision_Permission.Sub_Divi
 SubDivision_Permission.drop_duplicates(subset=['SFDC_UserID', 'Sub_Division'], keep='first', inplace=True)
 
 # Step 2: Give SEM, Director & VP access to districts derived from their sub-ordinate
-Resource_List = ['SE', 'SEM', 'SE Director', 'SA Director']
+Resource_List = ['SE', 'SEM', 'Sr SEM', 'SE Director', 'SA Director']
 for x in Resource_List:
     Manager_list = list(dict.fromkeys(SubDivision_Permission[SubDivision_Permission.Resource_Group==x]['Manager_EmployeeID']))
     
@@ -522,9 +598,10 @@ for i in range(0,len(to_sql_type.Columns)):
     data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
 
 SubDivision_Permission.to_sql('SE_SubDivision_Permission_FY21', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
-
+'''
 ##########################################################################################
-
+# Subordinate permission moved to source from workday hierarchy
+'''
 # Step 1: Find Manager names of who has SEs reporting, pull the Sub_Divisions of the reporting SEs
 SE_Subordinate_Permission = pd.DataFrame(columns = ['Name','Email', 'EmployeeID', 'SFDC_UserID', 'Resource_Group', 'Subordinate', 'Manager', 'Manager_EmployeeID'])
 
@@ -566,10 +643,11 @@ for i in mgr_level:
         
         # The SE Directors are reporting to Nathan Hall (interim for Zack Murphy)  who do have territory/quota assignment
         header = Quota_assignment_W.loc[Quota_assignment_W.EmployeeID==j,['Name','Email','EmployeeID','SFDC_UserID','Resource_Group','Manager','Manager_EmployeeID']]
-        ''' Nathan become the offical AMER VP
-        if j == "Nathan Hall" :
-            header = pd.DataFrame([{'Name':'Nathan Hall', 'Email':'nhall@purestorage.com', 'SFDC_UserID':'0050z000006lcFnAAI', 'Resource_Group':'SE AVP', 'Manager':'Alex McMullan'}])
-        '''
+
+#        Nathan become the offical AMER VP
+#        if j == "Nathan Hall" :
+#            header = pd.DataFrame([{'Name':'Nathan Hall', 'Email':'nhall@purestorage.com', 'SFDC_UserID':'0050z000006lcFnAAI', 'Resource_Group':'SE AVP', 'Manager':'Alex McMullan'}])
+
         #[Quota_assignment_W.loc[Quota_assignment_W.Name==j,['Name','Email','SFDC_UserID','Resource_Group','Manager']]]
         temp = pd.concat([header]*(len(Subordinate_List)), ignore_index=True)
         temp = pd.concat([temp, Subordinate_List], axis=1)
@@ -627,11 +705,10 @@ temp_master.rename(columns = {'M1_Theater':'Theater',
 
 SE_Subordinate_Permission = pd.merge(SE_Subordinate_Permission[['Name', 'User', 'SFDC_UserID', 'Resource_Group', 'Subordinate']], temp_master, how='left', on='Subordinate').sort_values(by = ['Name', 'Subordinate'])
 
-'''
 #adding this because SE ISR are assigned with a super region id
-SE_Subordinate_Permission.loc[SE_Subordinate_Permission.Super_Region=='ISR Roll-up - AMER','Region'] = 'ISR Roll-up - AMER'
-SE_Subordinate_Permission.loc[SE_Subordinate_Permission.Super_Region=='ISR Roll-up - AMER','District'] = 'ISR Roll-up - AMER'
-'''
+#SE_Subordinate_Permission.loc[SE_Subordinate_Permission.Super_Region=='ISR Roll-up - AMER','Region'] = 'ISR Roll-up - AMER'
+#SE_Subordinate_Permission.loc[SE_Subordinate_Permission.Super_Region=='ISR Roll-up - AMER','District'] = 'ISR Roll-up - AMER'
+
 
 # adding 1 row for Lee because he own a territory
 exception_user = {'Name' : 'Lee Morris',
@@ -659,7 +736,7 @@ for i in range(0,len(to_sql_type.Columns)):
     
 SE_Subordinate_Permission.to_sql('SE_Subordinate_Permission_FY21', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
 
-
+'''
 
 print('I am so done')
 
