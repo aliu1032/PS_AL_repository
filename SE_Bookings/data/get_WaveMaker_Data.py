@@ -7,12 +7,12 @@ import pydrive.files
 from pydrive import drive
 from datetime import datetime
 
-GoogleAuth.DEFAULT_SETTINGS['client_config_file'] = "\\Users\\aliu\\Documents\\client_secrets.JSON"
+GoogleAuth.DEFAULT_SETTINGS['client_config_file'] = "C:\\Users\\aliu\\Documents\\client_secrets.JSON"
 gauth = GoogleAuth()
 gauth.LocalWebserverAuth() # Creates local webserver and auto handles authentication.
 
 #Download the WaveMaker Report Excel file with password into Downloads folder
-share_link = 'https://drive.google.com/file/d/1dx2z0vJ-QT0pFD9BNWXO46R3wHVJ7RVX/view?usp=sharing'
+share_link = 'https://drive.google.com/file/d/1IW99prvXP6_8yjrvw7IMCYvTxa2m8Gky/view?usp=sharing'
 
 file_id = share_link[share_link.find('/file/d')+8:share_link.find('/view')]
 file_name = "C:\\Users\\aliu\\Downloads\\temp_WM_report.xlsx"
