@@ -13,6 +13,7 @@ With
 	--and Oppt.CloseDate >= '2018-02-05'-- and Oppt.CloseDate <= '2020-05-31'	
 	--where Oppt.Id = @Lookup_Oppt_Id
 	),		
+	
 
 /* Outbound transfer order and the corresponding item fulfillment + item receipt, created for Opportunity POC */
 #Outbound_Item_Fulfill as (
