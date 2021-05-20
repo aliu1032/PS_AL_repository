@@ -13,30 +13,44 @@ With
 	--and Oppt.CloseDate >= '2018-02-05'-- and Oppt.CloseDate <= '2020-05-31'	
 	--where Oppt.Id = @Lookup_Oppt_Id
 	),		
-	
 
-/* Outbound transfer order and the corresponding item fulfillment + item receipt, created for Opportunity POC */
-#Outbound_Item_Fulfill as (
+#Item_Fulfill as (
 	select TrnsO.SFDC_SYNC_ID, F.Created_From_ID
 		 , FL.Item_ID
 		 , Inv.inventory_number 
-		 , TrnsO.TranId [Ship TO#], TrnsO.Status, TrnsO.Memo [Ship TO Memo], TrnsO.SFDC_SHIPPICKUP_REQUEST_ID
-		 , F.TranID [OIF #], Loc.Name [Ship From], F.TranDate [OIF Date]
+		 , TrnsO.TranId [TO#], TrnsO.Status, TrnsO.Memo [TO Memo], TrnsO.SFDC_SHIPPICKUP_REQUEST_ID, TO_Loc.Name [Transfer Location]
+		 , F.TranID [IF #], Loc.Name [Ship From], F.TranDate [IF Date]
+		 /* calucate the Transfer Order direction based on SFDC reference, and the Transfer Location */
+		 , case 
+				when TrnsO.SFDC_SHIPPICKUP_REQUEST_ID like 'PUR-' then 'Return'
+				when len(TrnsO.SFDC_SHIPPICKUP_REQUEST_ID) = 18 then 'Ship'
+				else
+					case 
+					when TO_Loc.Name like ('%POC%') then 'Ship'
+					when TO_Loc.Name in ('Sales & Marketing DOM Inv', 'Sales & Marketing EMEA Inv','Sales & Marketing APAC Inv', 'Sales & Marketing Cust Sat Inv','Sales & Marketing COD Inv') then 'Ship'
+					when TO_Loc.Name like ('%Cokeva%') then 'Return'
+					when TO_Loc.Name like ('%Flextron%') then 'Return'
+					when TO_Loc.Name like ('%Foxconn%') then 'Return'
+					when TO_Loc.Name like ('%FCZ%') then 'Return'
+					else 'Ship'
+					end 
+			end [Type]
 	from NetSuite.dbo.STG_NetSuite_Transaction_Lines FL 
 	left join NetSuite.dbo.STG_NetSuite_Transactions F on FL.Transaction_ID = F.Transaction_ID
 	left join NetSuite.dbo.STG_NetSuite_Transaction_Inventory_Number Inv on Inv.transaction_id = FL.Transaction_ID and Inv.transaction_line = FL.Transaction_Line_ID
 	left join NetSuite.dbo.STG_NetSuite_Transactions TrnsO on TrnsO.Transaction_ID = F.Created_From_ID
 	left join NetSuite.dbo.STG_NetSuite_Locations Loc on Loc.Location_ID = FL.Location_ID
+	left join NetSuite.dbo.STG_NetSuite_Locations TO_Loc on TO_Loc.Location_ID = TrnsO.Transfer_Location
 	
 	where F.SFDC_SYNC_ID in (select * from #SFDC_Deal)
-	and F.Transaction_Type = 'Item Fulfillment' and FL.Account_ID = 123 and FL.Location_ID in (1, 42)
+	and F.Transaction_Type = 'Item Fulfillment' and FL.Account_ID = 123 --and FL.Location_ID in (1, 42)
 	--and FL.Quantity_Received_In_Shipment is not null 
 	and TrnsO.Transaction_Type = 'Transfer Order'
 	),
 
-#Outbound_Item_Receipt as (
+#Item_Receipt as (
 	select TrnsO.SFDC_SYNC_ID, R.Created_From_ID
-		 , R.TranID [OIR #], Loc.Name [Ship to], R.TranDate [OIR Date]
+		 , R.TranID [IR #], Loc.Name [Ship to], R.TranDate [IR Date]
 		 , Inv.inventory_number
 	from NetSuite.dbo.STG_NetSuite_Transaction_Lines RL 
 	left join NetSuite.dbo.STG_NetSuite_Transactions R on RL.Transaction_ID = R.Transaction_ID
@@ -45,67 +59,25 @@ With
 	left join NetSuite.dbo.STG_NetSuite_Locations Loc on Loc.Location_ID = RL.Location_ID
 	
 	where R.SFDC_SYNC_ID in (select * from #SFDC_Deal)
-	and R.Transaction_Type = 'Item Receipt' and RL.Account_ID = 123 and RL.Location_ID != 1 and RL.Location_ID != 42
+	and R.Transaction_Type = 'Item Receipt' and RL.Account_ID = 123 --and RL.Location_ID != 1 and RL.Location_ID != 42
 	--and RL.Quantity_Received_In_Shipment is not null 
     and TrnsO.Transaction_Type = 'Transfer Order'
 	),
 
 #NS_POC_TransferOrder_Ship as (
 	select OIF.SFDC_SYNC_ID
-		 , 'Ship TO' as [Type]
+		 --, 'Ship TO' as [Type]
+		 , OIF.[Type]
 		 , OIF.[Item_ID]
 		 , OIF.inventory_number [Serial Number]
-		 , OIF.[Ship TO#] [TranID], OIF.Status, OIF.[Ship TO Memo] [Memo], OIF.SFDC_SHIPPICKUP_REQUEST_ID
-		 , OIF.[OIF #] [IF#], OIF.[OIF Date] [IF Date], OIF.[Ship From] [IF Location], OIR.[OIR #] [IR#], OIR.[OIR Date] [IR Date], OIR.[Ship to] [IR Location]
-		 , case when OIF.Status = 'Received' then 1 else 0 end as [POC Shipped Qty], 0 as [POC Returned Qty], 0 as [POC Sold Qty]
-	from #Outbound_Item_Fulfill OIF 
-	left join #Outbound_Item_Receipt OIR on OIR.inventory_number = OIF.inventory_number and OIR.SFDC_SYNC_ID = OIF.SFDC_SYNC_ID and OIR.Created_From_ID = OIF.Created_From_ID
-),	
-
-
-#Inbound_Item_Fulfill as (
-	select TrnsO.SFDC_SYNC_ID, F.Created_From_ID
-		 , FL.Item_ID
-		 , Inv.inventory_number
-		 , TrnsO.TranId [Return TO#], TrnsO.Status, TrnsO.Memo [Return TO Memo], TrnsO.SFDC_SHIPPICKUP_REQUEST_ID
-		 , F.TranID [RIF #], Loc.Name [Return from], F.TranDate [RIF Date]
-	from NetSuite.dbo.STG_NetSuite_Transaction_Lines FL 
-	left join NetSuite.dbo.STG_NetSuite_Transactions F on FL.Transaction_ID = F.Transaction_ID
-	left join NetSuite.dbo.STG_NetSuite_Transaction_Inventory_Number Inv on Inv.transaction_id = FL.Transaction_ID and Inv.transaction_line = FL.Transaction_Line_ID
-	left join NetSuite.dbo.STG_NetSuite_Transactions TrnsO on TrnsO.Transaction_ID = F.Created_From_ID
-	left join NetSuite.dbo.STG_NetSuite_Locations Loc on Loc.Location_ID = FL.Location_ID
-	
-	where F.SFDC_SYNC_ID in (select * from #SFDC_Deal)
-	and F.Transaction_Type = 'Item Fulfillment' and FL.Account_ID = 123 and FL.Location_ID != 1 and FL.Location_ID != 42
-	and TrnsO.Transaction_Type = 'Transfer Order'
-	),
-
-#Inbound_Item_Receipt as (
-	select TrnsO.SFDC_SYNC_ID, R.Created_From_ID
-		 , R.TranID [RIR #], Loc.Name [Return to], R.TranDate [RIR Date]
-		 , Inv.inventory_number
-	from NetSuite.dbo.STG_NetSuite_Transaction_Lines RL 
-	left join NetSuite.dbo.STG_NetSuite_Transactions R on RL.Transaction_ID = R.Transaction_ID
-	left join NetSuite.dbo.STG_NetSuite_Transaction_Inventory_Number Inv on Inv.transaction_id = RL.Transaction_ID and Inv.transaction_line = RL.Transaction_Line_ID
-	left join NetSuite.dbo.STG_NetSuite_Transactions TrnsO on TrnsO.Transaction_ID = R.Created_From_ID
-	left join NetSuite.dbo.STG_NetSuite_Locations Loc on Loc.Location_ID = RL.Location_ID
-	
-	where R.SFDC_SYNC_ID in (select * from #SFDC_Deal)
-	and R.Transaction_Type = 'Item Receipt' and RL.Account_ID = 123 --and RL.Location_ID in (1, 42)
-	and TrnsO.Transaction_Type = 'Transfer Order'
-	),
-
-#NS_POC_TransferOrder_Return as (
-	select RIF.SFDC_SYNC_ID
-		 , 'Return TO' as [Type]
-		 , RIF.Item_ID
-		 , RIF.inventory_number [Serial Number]
-		 , RIF.[Return TO#] [TranID], RIF.Status, RIF.[Return TO Memo] [Memo], RIF.SFDC_SHIPPICKUP_REQUEST_ID
-		 , RIF.[RIF #] [IF#], RIF.[RIF Date] [IF Date], RIF.[Return from] [IF Location], RIR.[RIR #] [IR#], RIR.[RIR Date] [IR Date], RIR.[Return to] [IR Location]
-		 , 0 as [POC Shipped Qty], case when RIF.Status = 'Received' then 1 else 0 end as [POC Returned Qty], 0 as [POC Sold Qty]
-	from #Inbound_Item_Fulfill RIF 
-	left join #Inbound_Item_Receipt RIR on RIR.inventory_number = RIF.inventory_number and RIR.SFDC_SYNC_ID = RIF.SFDC_SYNC_ID and RIR.Created_From_ID = RIF.Created_From_ID
-	where RIF.inventory_number is not null /*Can only reconcile ship and return of serialized parts */
+		 , OIF.[TO#] [TranID], OIF.Status, OIF.[TO Memo] [Memo], OIF.SFDC_SHIPPICKUP_REQUEST_ID
+		 , OIF.[Transfer Location]
+		 , OIF.[IF #] [IF#], OIF.[IF Date] [IF Date], OIF.[Ship From] [IF Location], OIR.[IR #] [IR#], OIR.[IR Date] [IR Date], OIR.[Ship to] [IR Location]
+		 , case when OIF.Type = 'Ship'  then 1 else 0 end as [POC Shipped Qty]
+		 , case when OIF.Type = 'Return' then 1 else 0 end as [POC Returned Qty]
+		 , 0 as [POC Sold Qty]
+	from #Item_Fulfill OIF 
+	left join #Item_Receipt OIR on OIR.inventory_number = OIF.inventory_number and OIR.SFDC_SYNC_ID = OIF.SFDC_SYNC_ID and OIR.Created_From_ID = OIF.Created_From_ID
 ),
 
 #SO_Item_Fulfill as (
@@ -114,8 +86,10 @@ With
 		 , FL.Item_ID
 		 , Inv.inventory_number [Serial Number]
 		 , TrnsO.TranId [TranID], TrnsO.Status, TrnsO.Memo [Memo], TrnsO.SFDC_SHIPPICKUP_REQUEST_ID
+		 , TrnsO.Transfer_Location
 		 , F.TranID [IF#], F.TranDate [IF Date], Loc.Name [IF Location], '' [IR#], '' as [IR Date], '' [IR Location]
-		 , 0 as [POC Shipped Qty], 0 as [POC Returned Qty], case when TrnsO.Status = 'Billed' then  1 else 0 end as [POC Sold Qty]
+		 , 0 as [POC Shipped Qty], 0 as [POC Returned Qty], 1 AS [POC Sold Qty]
+		 --, case when TrnsO.Status = 'Billed' then  1 else 0 end as [POC Sold Qty]
 	from NetSuite.dbo.STG_NetSuite_Transaction_Lines FL 
 	left join NetSuite.dbo.STG_NetSuite_Transactions F on FL.Transaction_ID = F.Transaction_ID
 	left join NetSuite.dbo.STG_NetSuite_Transaction_Inventory_Number Inv on Inv.transaction_id = FL.Transaction_ID and Inv.transaction_line = FL.Transaction_Line_ID
@@ -145,10 +119,7 @@ With
 	--	  , min(a.[IR Date]) over (partition by a.SFDC_SYNC_ID) [Latest Returned Date]
 	from (
 			Select * from 
-				#NS_POC_TransferOrder_Ship 
-			Union
-			Select * from 
-				#NS_POC_TransferOrder_Return 
+				#NS_POC_TransferOrder_Ship
 			Union
 			Select * from 
 				#SO_Item_Fulfill
@@ -158,9 +129,12 @@ With
 )
 --where len(SFDC_SYNC_ID) = 18
 --order by [Serial Number]
+
+/* bring a journal */
 Select * from #NS_Transactions_Journal
 
-/*
+
+/* pivot the journal and calculate the Serial Number status */
 select Oppt_Id, Item_Id, Item_Name, [Serial Number],
 	   sum([POC Shipped Qty]) [POC Shipped Qty], sum([POC Returned Qty]) [POC Returned Qty], sum([POC Sold Qty]) [POC Sold Qty]
 	   , case when sum([POC Sold Qty]) > 0 then 'Sold'
@@ -170,4 +144,3 @@ select Oppt_Id, Item_Id, Item_Name, [Serial Number],
 	   	 end [Serial Number Status]
 from #NS_Transactions_Journal
 group by Oppt_Id, Item_Id, Item_Name, [Serial Number]
-*/
