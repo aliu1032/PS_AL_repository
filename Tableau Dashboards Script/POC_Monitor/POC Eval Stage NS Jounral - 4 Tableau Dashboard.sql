@@ -144,3 +144,23 @@ select Oppt_Id, Item_Id, Item_Name, [Serial Number],
 	   	 end [Serial Number Status]
 from #NS_Transactions_Journal
 group by Oppt_Id, Item_Id, Item_Name, [Serial Number]
+
+
+
+/**********************************/
+/* Inventory Adjustment           */
+/**********************************/
+select 'Inventory Adjustment' as [Type]
+	, IA.TranID, IA.TranDate, IA.Status, IA.Memo
+	, IAL.Item_ID, Inv.inventory_number [Serial Number], IAL.Memo
+	, IAL.Account_ID, Acc.Accountnumber, Acc.Account_Name	
+	, IAL.Location_ID, Loc.Name [Location]
+from NetSuite.dbo.STG_NetSuite_Transaction_Lines IAL
+left join NetSuite.dbo.STG_NetSuite_Transactions IA on IA.Transaction_ID = IAL.Transaction_ID
+left join NetSuite.dbo.STG_NetSuite_Transaction_Inventory_Number Inv on Inv.transaction_id = IAL.Transaction_ID and Inv.transaction_line = IAL.Transaction_Line_ID
+left join NetSuite.dbo.STG_NetSuite_Accounts Acc on Acc.Account_ID = IAL.Account_ID
+left join NetSuite.dbo.STG_NetSuite_Locations Loc on Loc.Location_ID = IAL.Location_ID
+where IA.Transaction_Type = 'Inventory Adjustment'
+and (IA.Memo like '%TO[0-9]%' or IA.Memo like '%PUR-[0-9]')
+and Inv.inventory_number is not null
+and IA.Create_Date >= '2021-02-01'

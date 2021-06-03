@@ -11,13 +11,12 @@
 
 With
 /***** Contact who we are interested ****/
-
 #Report_Contact as (
 		Select C.Id 
 		from PureDW_SFDC_Staging.dbo.[Contact] C
 		left join PuredW_SFDC_staging.dbo.[Account] P on P.Id = C.AccountId
 		where P.Type in ('Reseller','Distributor')
-		and C.Role_Type__c in ('Parter SE')
+		and C.Role_Type__c in ('Partner SE') or C.Participate_in_Wavemaker_programme__c = 'Yes'
 		
 		Union
 		
@@ -33,15 +32,17 @@ Select C.Id [Contact_Id], Owner.Name [Contact Owner], C.IsDeleted, C.Owner_Is_Ac
   	 , C.Name [Contact], C.Role_Type__c [Assigned Role], C.Email [Contact Email]
   	 , case when C.Participate_in_Wavemaker_programme__c = 'Yes' then 'Yes' else null end [Wavemaker Participtant]
   	 , C.Wavemaker_level__c [Wavemaker level]
-  	 , C_Acct.Id [PartnerId], C_Acct.Name [Partner Name], P_CTM.Name [Partner CTM], C_Acct.Partner_Tier__c [Partner Tier]
+  	 , C_Acct.Id [PartnerId], C_Acct.Name [Partner Name], P_CTM.Name [Partner PTM], C_Acct.Partner_Tier__c [Partner Tier]
   	 , C_Acct.Type [Partner Type] 
-  	 , C_CTM.Name [Contact CTM]
+  	 , C_CTM.Name [Contact PTM]
      , C.MailingCity [Contact City], C.MailingState [Contact State], C.MailingPostalCode [Contact PostalCode], C.MailingCountry [Contact Country]
+     , left(C_User.Id,15) [Contact_UserId]
 from PureDW_SFDC_staging.dbo.[Contact] C
 left join PureDW_SFDC_Staging.dbo.[Account] C_Acct on C_Acct.Id = C.AccountId
 left join PureDW_SFDC_Staging.dbo.[User] P_CTM on P_CTM.Id = C_Acct.Channel_Technical_Manager__c
 left join PureDW_SFDC_Staging.dbo.[User] C_CTM on C_CTM.Id = C.Channel_Technical_Manager__c
 left join PureDW_SFDC_Staging.dbo.[User] Owner on Owner.Id = C.OwnerId
+left join PureDW_SFDC_Staging.dbo.[User] C_User on C_User.ContactId = C.Id
 where C.Id in (Select * from #Report_Contact)
 and C_Acct.Name != 'HIDDEN'
 and C.Name = 'Jonathan Kowall'
@@ -57,6 +58,8 @@ and C.Name = 'Jonathan Kowall'
 /***    3. Certification from Pure_Certification                         ***/
 /***                                                                     ***/
 /***    Include Wavemaker Partcipant flag and level                      ***/
+/***    Prepare dataset with a cross join to show accreditation of all   ***/
+/***    interested training & certification                              ***/
 /***                                                                     ***/
 /***************************************************************************/
 
@@ -84,9 +87,9 @@ With
 	Select * from #Report_Contact
 		cross JOIN		
 		(
-			SELECT Accreditation, Program
+			SELECT Accreditation, [Type], [Display_Order], PurePractice_SE_Track, Wavemaker_Champion, Wavemaker_Legend, PostSales_Services_Certifications -- Program
 			FROM SalesOps_DM.dbo.PartnerSE_RequiredCertification
-			WHERE Program != 'None'
+			--WHERE Program != 'None'
 		) A
 ),
 
@@ -171,15 +174,16 @@ With
 			left join PureDW_SFDC_staging.dbo.Litmos__LearningPath__c LP on LP.Id = LPR.Litmos__LearningPathID__c
 			left join PureDW_SFDC_staging.dbo.[User] C_User on C_User.ContactId = LPR.Litmos__ContactID__c
 			where 
-				LPR.Litmos__LearningPathID__c in ('aEf0z0000008OK1CAM', -- Pure Storage Sales Accreditation : Intro to Pure
-												  'aEf0z000000XZHXCA4',	-- FlashBlade Basics : Intro to Pure
-												  'aEf0z000000XZDQCA4', -- Pure Partner Foundations Technical : FA
-												  'aEf0z000000XZHcCAO', -- Pure Partner Advanced Technical : FA
-												  'aEf0z000000XZDaCAO', -- FlashBlade Architect : FB
-												  'aEf0z000000XZHSCA4', -- FlashBlade Enablement : FB
-												  'aEf4W0000008OyuSAE',	-- FlashBlade Advanced : FB
-												  'aEf0z000000XZHmCAO', -- Solution (Partners)
-												  'aEf0z000000XZH8CAO' -- Tools (Partners)
+				LPR.Litmos__LearningPathID__c in ('aEf0z0000008OK1CAM', -- Pure Storage Sales Accreditation : Intro to Pure (74608)
+												  'aEf0z000000XZHXCA4',	-- FlashBlade Basics : Intro to Pure (91659)
+												  'aEf0z000000XZDQCA4', -- Pure Partner Foundations Technical : FA (89058)
+												  'aEf0z000000XZCcCAO', -- ActiveCluster Foundations : FA (88155)
+												  'aEf0z000000XZHcCAO', -- Pure Partner Advanced Technical : FA (91671)
+												  'aEf0z000000XZDaCAO', -- FlashBlade Architect : FB (89060)
+												  'aEf0z000000XZHSCA4', -- FlashBlade Enablement : FB (91658)
+												  'aEf4W0000008OyuSAE',	-- FlashBlade Advanced : FB (92765)
+												  'aEf0z000000XZHmCAO', -- Solution (Partners) (91941)
+												  'aEf0z000000XZH8CAO' -- Tools (Partners) (90868)
 			 	)
 				and LPR.Litmos__ContactID__c is not null
 				and LPR.Litmos__Completed__c  = 'True'
@@ -188,7 +192,7 @@ With
 	/*** Self paced training course */
 				
 		 select Litmos__ContactID__c [ContactId]
-		 	   , cast(Course_Name__c as varchar) [Track_name]
+		 	   , cast(Course_Name__c as varchar(100)) [Track_name]
 		 	   , cast(Litmos__FinishDate__c as date) [Date_completed]
 		 	   , C_User.Id [CUser_Id]
 		 	  -- , LRM.Litmos__ProgramID__c,   Litmos__status__c, Litmos__User_Name__c
@@ -196,7 +200,7 @@ With
 		from PureDW_SFDC_staging.dbo.Litmos__UserProgramResult__c LRC
 		left join PureDW_SFDC_staging.dbo.[User] C_User on C_User.ContactId = LRC.Litmos__ContactID__c
 		where 
-			Litmos__ProgramID__c = 'aEn4W000000CfuUSAS' -- Pure As-A-Service (Basic)
+			Litmos__ProgramID__c in ('aEn4W000000CfuUSAS', 'aEn4W000000Cg5qSAC') -- Pure As-A-Service (Basic), FlashBlade Implementation Training Assessment
 			and Litmos__Completed__c = 'true'
 			and Litmos__ContactID__c is not null -- Contact's record
 ),
@@ -209,14 +213,14 @@ With
 						( -- clean up certification name --
 						 Select CreatedDate, LastModifiedDate, Contact__c
 						 		, Exam_Grade__c, cast(Exam_Date__c as Date) Exam_Date__c, cast(Cert_Expiration_Date__c as Date) Cert_Expiration_Date__c
-								, case when (Exam_Code__c like 'PCARA_%') then 'FA Architect Associate Certificate' --
+								, case when (Exam_Code__c like 'PCARA_%') then 'Architect Associate Certificate' --
 					   				   when (Exam_Code__c like 'FAP_%') then 'FA Architect Professional Certificate' --
-					   				   when (Exam_Code__c like 'FAAE_%') then 'FA Architect Expert Certificate' --
+					   				   when (Exam_Code__c like 'FAAE_%') then 'FA Architect Expert Certificate'
 					   				   when (Exam_Code__c like 'FBAP_%') then 'FB Architect Professional Certificate' --
 					   				   when (Exam_Code__c like 'FAIP_%') then 'FA Implementation Professional Certificate'
 									   when (Exam_Code__c like 'PCIA_%') then 'Implementation Associate Certificate'
 					   				   
-					   				   when (Exam_Code__c like 'PCA_%') then 'FA Foundation Certificate'
+					   				   when (Exam_Code__c like 'PCA_%') then 'Pure Storage Foundation Certificate' --
 					   				   when (Exam_Code__c like 'PCADA_%') then 'Adminstration Associate Certificate'
 					   				   when (Exam_Code__c like 'PCSA_%') then 'Support Associate Certificate'
 					   			  end [Certification]
@@ -233,7 +237,11 @@ With
 -- need a column for all 'interested' training and certification
 -- need to remove duplicate and take the latest completion
 
-Select #Report_Contact_Accreditation.Id [Contact_Id], #Report_Contact_Accreditation.Accreditation, #Report_Contact_Accreditation.Program, a.Date_Completed, a.[Date_Expired],
+Select #Report_Contact_Accreditation.Id [Contact_Id], #Report_Contact_Accreditation.Display_Order
+	   , #Report_Contact_Accreditation.Accreditation, #Report_Contact_Accreditation.[Type], #Report_Contact_Accreditation.[PurePractice_SE_Track]
+	   , #Report_Contact_Accreditation.[Wavemaker_Champion],#Report_Contact_Accreditation.[Wavemaker_Legend]
+	   , #Report_Contact_Accreditation.[PostSales_Services_Certifications]
+	   , a.Date_Completed, a.[Date_Expired],
        case when datediff(day,a.[Date_Expired], getdate()) <= 90 then 'Certificate expire soon' else null end [Cert_Reminder] 
 from (
 	Select *,
@@ -246,18 +254,17 @@ from (
 ) a
 right join #Report_Contact_Accreditation on #Report_Contact_Accreditation.Accreditation = a.Accreditation and #Report_Contact_Accreditation.Id = a.Contact_Id
 where (a.RN = 1 or a.RN is null)
-and #Report_Contact_Accreditation.Id like '0036000002D32J9AAJ'
+and #Report_Contact_Accreditation.Accreditation like '%Imple%'
 
 
 /* flatten the training & certification record */
 		Select C.Id [Contact_Id]
 			   , T1.[Sales Accreditation], T2.[FlashBlade Basics]
-			   , FA1.[Foundations Technical], FA2.[Advanced Technical]
-			   --, FA3.[ActiveCluster Foundations]
+			   , FA1.[Foundations Technical], FA2.[Advanced Technical], FA3.[ActiveCluster Foundations]
 			   , FB1.[FlashBlade Architect], FB2.[FlashBlade Enablement], FB3.[FlashBlade Advanced]
 			   , B4.[Solution Training], B5.[Tools Training]
 			   
-			   , C1.[FA Architect Associate], C2.[FA Architect Professional], C3.[FA Architect Expert], C4.[FB Architect Professional]
+			   , C1.[FA Architect Associate], C2.[FA Architect Professional], C3.[FA Architect Expert], C4.[FB Architect Professional], C5.[Pure Storage Foundation]
 		
 		from #Report_Contact C
 		left join (Select ContactId, Date_Completed [Sales Accreditation] from #Contact_Pure_Training where Track_Name = 'Pure Storage Sales Accreditation') T1 on T1.ContactId = C.Id
@@ -265,7 +272,7 @@ and #Report_Contact_Accreditation.Id like '0036000002D32J9AAJ'
 		
 		left join (Select ContactId, Date_Completed [Foundation Technical] from #Contact_Pure_Training where Track_Name = 'Pure Partner Foundations Technical') FA1 on FA1.ContactId = C.Id
 		left join (Select ContactId, Date_Completed [Advanced Technical] from #Contact_Pure_Training where Track_Name = 'Pure Partner Advanced Technical') FA2 on FA2.ContactId = C.Id
---		left join (Select ContactId, Date_Completed [ActiveCluster Foundations] from #Contact_Pure_Training where Track_Name = 'ActiveCluster Foundations') FA3 on FA3.ContactId = C.Id
+		left join (Select ContactId, Date_Completed [ActiveCluster Foundations] from #Contact_Pure_Training where Track_Name = 'ActiveCluster Foundations') FA3 on FA3.ContactId = C.Id
 		
 		left join (Select ContactId, Date_Completed [FlashBlade Architect] from #Contact_Pure_Training where Track_Name = 'FlashBlade Architect') FB1 on FB1.ContactId = C.Id
 		left join (Select ContactId, Date_Completed [FlashBlade Enablement] from #Contact_Pure_Training where Track_Name = 'FlashBlade Enablement') FB2 on FB2.ContactId = C.Id
@@ -274,10 +281,11 @@ and #Report_Contact_Accreditation.Id like '0036000002D32J9AAJ'
 		left join (Select ContactId, Date_Completed [Solution Training] from #Contact_Pure_Training where Track_Name = 'Solution (Partners)') B4 on B4.ContactId = C.Id
 		left join (Select ContactId, Date_Completed [Tools Training] from #Contact_Pure_Training where Track_Name = 'Tools (Partners)') B5 on B5.ContactId = C.Id
 		
-		left join (Select ContactId, Date_Completed [FA Architect Associate] from #Contact_Pure_Certification where Certification = 'FA Architect Associate Certificate') C1 on C1.ContactId = C.Id
+		left join (Select ContactId, Date_Completed [Architect Associate] from #Contact_Pure_Certification where Certification = 'Architect Associate Certificate') C1 on C1.ContactId = C.Id
 		left join (Select ContactId, Date_Completed [FA Architect Professional] from #Contact_Pure_Certification where Certification = 'FA Architect Professional Certificate') C2 on C2.ContactId = C.Id
 		left join (Select ContactId, Date_Completed [FA Architect Expert] from #Contact_Pure_Certification where Certification = 'FA Architect Expert Certificate') C3 on C3.ContactId = C.Id
 		left join (Select ContactId, Date_Completed [FB Architect Professional] from #Contact_Pure_Certification where Certification = 'FB Architect Professional Certificate') C4 on C4.ContactId = C.Id
+		left join (Select ContactId, Date_Completed [Foundation Certification] from #Contact_Pure_Certification where Certification = 'Pure Storage Foundation Certificate') C5 on C5.ContactId = C.Id
 
 		
 /***************************************************************************/
@@ -333,8 +341,9 @@ Select a.*,
 from ( 
 	Select
 		O.Id [Oppt Id], O.Name [Oppt_Name],
-		RecT.Name RecType, O.[Type] , SE.Name [SE Opportunity Owner],
-		EU_Acct.Name [Customer], EU_Acct.Id [Account Id], 		
+		RecT.Name RecType, O.[Type] , SE.Name [Pure SE Oppt Owner], SE.Manager__c [Pure SEM],
+		EU_Acct.Name [Customer], EU_Acct.MDM_Segment__c, EU_Acct.Segment__c, EU_Acct.EMEA_Segment__c,
+		EU_Acct.MDM_Vertical__c, EU_Acct.MDM_Sub_Vertical__c, EU_Acct.Vertical__c, EU_Acct.Sub_vertical__c, EU_Acct.Id [Account Id], 		
 
 		O.Manufacturer__c [Mfg],
 	    case when O.CBS_Category__c is not null and O.CBS_Category__c != 'NO CBS' then 'Cloud Block Store'
@@ -394,8 +403,10 @@ from (
 		--O.CurrencyIsoCode, O.Amount,
 		O.Converted_Amount_USD__c Amount_in_USD,
 
-		case when O.StageName in ('Stage 8 - Closed/Won', 'Stage 8 - Credit') and O.Partner_Sourced__c = 'true' then 1 else 0 end [Won Partner Sourced],
-		case when O.StageName in ('Stage 8 - Closed/Won', 'Stage 8 - Credit') then O.Product_Type__c else null end [Won Product],
+		--case when O.StageName in ('Stage 8 - Closed/Won', 'Stage 8 - Credit') and O.Partner_Sourced__c = 'true' then 1 else 0 end [Won Partner Sourced],
+		case when O.StageName in ('Stage 8 - Closed/Won', 'Stage 8 - Credit') and O.Partner_Sourced__c = 'true' then O.Id else Null end [Won Partner Sourced],
+		case when O.StageName in ('Stage 8 - Closed/Won', 'Stage 8 - Credit') and O.Partner_Sourced__c = 'true' then O.Converted_Amount_USD__c else Null end [Partner Sourced Booking$],
+		case when O.StageName in ('Stage 8 - Closed/Won', 'Stage 8 - Credit') and O.Manufacturer__c = 'Pure Storage' then O.Product_Type__c else null end [Won Product],
 		case when cast(substring(O.StageName,7,1) as Int) <= 7 and O.Partner_Sourced__c = 'true' then 1 else 0 end [Open Partner Sourced],
 		case when cast(substring(O.StageName,7,1) as Int) <= 7 then O.Product_Type__c else null end [Open Product],
 		
@@ -422,7 +433,7 @@ from (
 		O.Partner_Sourced__c [Partner Sourced], O.Channel_Led_Deal__c [Channel Led], O.Partner_Account__c [Partner Id],
 		P.Name [Partner Name], P.Partner_Tier__c [Partner Tier], P.Type [Partner Type],
 
-		A_CTM.Name [Partner CTM],
+		A_CTM.Name [Partner PTM],
 		/* User O.Partner Account. Impact the Partner SE may be grouped into a different account, the Partner SE count could impactedn */
 		P.Theater__c [Partner Theater], P.Sub_Division__c [Partner SubDivision],
 		O.Partner_SE__c, O.Partner_SE_Engagement_Level__c [Partner Engagement Level],
@@ -449,3 +460,67 @@ from (
 		--- Selecting Capax and PaaS Oppt where Partner Account is stamped
 ) a
 	
+
+
+/***************************************************************************/
+/***                                                                     ***/
+/***    Test Drive Usage                                                 ***/
+/***                                                                     ***/
+/***************************************************************************/
+select Status, [Instance], [Lab name], [Product]
+--, [Created at]
+, case when [Created at] is null then null
+	   when [Created at] like '2%' then convert(datetime, left([Created at],19))
+	   else convert(datetime, [Created at]) --'text' 
+  end [Created at]
+--, [Deleted at]
+, case when [Deleted at] is null then null
+	   when [Deleted at] like '2%' then convert(datetime, left([Deleted at],19))
+	   else convert(datetime, [Deleted at]) --'text' 
+  end [Deleted at]
+, datediff(minute,[Created at], [Deleted at]) [Duration]
+, [Created by], [Created by user name]
+, case when [Created by user name] like '%.p3' then left([Created by user name], len([Created by user name])-3) else [Created by user name] end [Created by Email]
+, [created by company type]
+, FiscalMonth, FiscalYear
+, [Presented to company], [Presented to user], [Opportunity ID]
+from Datascience_Workbench_Views.dbo.v_csc_ptd_with_fiscal_values
+where [Created by company type] in ('Customer', 'Channel partner')
+  and [Created by] like 'Charles%'
+  
+  = 'chasali@cdw.com'
+
+  
+/***************************************************************************/
+/***                                                                     ***/
+/***    FA Sizer                                                         ***/
+/***                                                                     ***/
+/***************************************************************************/
+  
+select cast(max(datemin) as date) [Last connect], email [Created by Email], sizeraction, count(*) [Count]
+  from [GPO_TSF_Dev ].dbo.v_fa_sizer_rs_action
+where email not like '%@purestorage.com'
+  and sizeraction in ('Create Scenarios', 'Create Sizing')
+	and email = 'mrhirst17@gmail.com'
+  group by email, sizeraction
+
+
+/***************************************************************************/
+/***                                                                     ***/
+/***    36 Insight Report                                                ***/
+/***                                                                     ***/
+/***************************************************************************/
+Select Report_date, ID, Name, Email, Company, WM_Level, User_Id, 
+       Balance [Annual Points Earned],
+       Date_of_Registration [Date of Registration],
+       Last_Login [Last Login],
+       Awarded_for_claims [Content/Activity points],
+       Awarded_for_prizes [Points from games],
+       [IsDisti?],
+       PTM_Id,
+       PTM_name,
+       [Activated?],
+       Log_in_count [Login count]
+FROM [SalesOps_DM].[dbo].[WaveMake_Rpt_Insight]
+ FROM [SalesOps_DM].[dbo].[WaveMake_Rpt_Insight]
+  

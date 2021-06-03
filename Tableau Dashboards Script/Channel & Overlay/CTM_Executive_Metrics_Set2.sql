@@ -56,7 +56,7 @@ Select C.Name [Contact], C.Id [Contact Id], A.Name [Partner], LP.Name [Path Name
 from PureDW_SFDC_Staging.dbo.Litmos__UserLearningPathResult__c LPR
 left join PureDW_SFDC_Staging.dbo.[Contact] C on C.Id = LPR.Litmos__ContactID__c
 left join PureDW_SFDC_Staging.dbo.[Account] A on A.Id = C.AccountId
-left join SalesOps_DM.dbo.Litmos__LearningPath__c LP on LP.Id = LPR.Litmos__LearningPathID__c
+left join PureDW_SFDC_Staging.dbo.Litmos__LearningPath__c LP on LP.Id = LPR.Litmos__LearningPathID__c
 where LPR.Litmos__ContactID__c is not null
 and A.[Type] in ('Reseller', 'Disti')
 and LP.Litmos__LitmosID__c in ('88650', '86123', '78513', '70972', '70973')

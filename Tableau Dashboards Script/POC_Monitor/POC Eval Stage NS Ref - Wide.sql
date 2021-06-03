@@ -1,6 +1,3 @@
-
-
-
 with
 #SFDC_Deal as (
 	Select Id

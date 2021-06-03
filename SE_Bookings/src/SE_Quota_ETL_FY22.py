@@ -34,7 +34,7 @@ db_columns_types = pd.read_excel(cfg.sup_folder + supplment, sheet_name = 'Outpu
 # Source data is manual export from Anaplan
 #===============================================================================
 from getDataFY22 import get_TerritoryID_Master
-TerritoryID_Master = get_TerritoryID_Master(1)
+TerritoryID_Master = get_TerritoryID_Master()
 
 #===============================================================================
 # Reading SE Territory and Quota from the Individual Quota Master spreadsheet
@@ -261,7 +261,6 @@ Coverage_assignment_L.to_sql('Coverage_assignment_byName_FY22', con=conn_str_loc
 Coverage_assignment_L.to_sql('Coverage_assignment_byName_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
 
 ''''''
-
 # Make an output of Coverage_assignment by Territory
 sel_Resource_Group = ['RSD','DM','Sales AE', 'FB AE',\
                       'SE Mgmt', 'Direct SE', 'FB SE', 'SE',\
@@ -292,11 +291,10 @@ Coverage_assignment_W.columns = Coverage_assignment_W.columns.droplevel(0)
 Coverage_assignment_W.columns=new_name
 #Coverage_assignment_W.drop(columns=[' Name',' Email',' EmployeeID',' SFDC_UserID'], inplace=True)  # dropping the users who is not tag to a resource group
 
-'''
-check_dup = SE_org_coverage.duplicated(subset=['Territory_ID', 'Name'])
-temp = SE_org_coverage.pivot(index = 'Territory_ID', columns = 'Name')
-temp = SE_org_coverage.pivot(index = 'Territory_ID', columns = 'Resource_Group', values='Name')
-'''
+
+#check_dup = SE_org_coverage.duplicated(subset=['Territory_ID', 'Name'])
+#temp = SE_org_coverage.pivot(index = 'Territory_ID', columns = 'Name')
+#temp = SE_org_coverage.pivot(index = 'Territory_ID', columns = 'Resource_Group', values='Name')
 ####
 ###FY22 Using the Anaplan [Sales Group 4] need to check here to construct the Resource Role Coverage map 
 ###If going to construct the report in Tableau, may be this table is not needed
@@ -321,17 +319,18 @@ for i in range(0,len(to_sql_type.Columns)):
     
 Coverage_assignment_W.fillna('', inplace=True)   
 
-'''#check length                     
-for i in Coverage_assignment_W.columns:
-    j = Coverage_assignment_W[i].map(lambda x: len(x)).max()
-    print (i + '  : ' + str(j))    
-'''    
+##check length                     
+#for i in Coverage_assignment_W.columns:
+#    j = Coverage_assignment_W[i].map(lambda x: len(x)).max()
+#    print (i + '  : ' + str(j))    
+    
 
 #Coverage_assignment_W.replace([np.nan], None, inplace=True)
 #Coverage_assignment_W = Coverage_assignment_W.where(pd.notnull(Coverage_assignment_W),None)
 
 Coverage_assignment_W.to_sql('Coverage_assignment_byTerritory_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype=data_type)
 Coverage_assignment_W.to_sql('Coverage_assignment_byTerritory_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+
 
 #------------------------------------------------------------------------------ 
 # Read the individual quota information
@@ -500,9 +499,10 @@ District_Permission.drop_duplicates(subset=['SFDC_UserID', 'Territory_ID'], keep
 '''
 
 # {Name : [User email, Resource_Group,Manager], [Names to copy]}
-extra_users = { 'April Liu' : ['aliu@purestorage.com','104663','SE Support', 'Steve Gordon', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']]
-#                'Thomas Waung' : ['twaung@purestorage.com', '103800', 'SE Support', 'Andrew LeSage', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
-#                'Steve Gordon' :['sgordon@purestorage.com','105394', 'SE Support','Gary Kortye', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']]
+extra_users = { 'April Liu' : ['aliu@purestorage.com','104663','SE Support', 'Steve Gordon', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
+                'Thomas Waung' : ['twaung@purestorage.com', '103800', 'SE Support', 'Andrew LeSage', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
+                'Steve Gordon' :['sgordon@purestorage.com','105394', 'SE Support','Gary Kortye', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']],
+                'Lauren Futris' :['lfutris@purestorage.com','108451', 'SE Support','Gary Kortye', ['Carl McQuillan', 'Nathan Hall','Zack Murphy']]
               }
 
 for i in list(extra_users.keys()) :

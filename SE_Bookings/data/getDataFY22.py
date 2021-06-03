@@ -21,11 +21,15 @@ import project_config as cfg
 # Anaplan Report
 # Google Folder: My Drive > SE Analytics > Analytics > Territory_Target
 #===============++++++++++========================================================
-def get_Anaplan_TerritoryID_Master(file_link, credential):
+def refresh_Anaplan_TerritoryID_Master(file_link, credential):
     #import pydrive.files
 
     print('Start process Anaplan Territory Quota file')
     
+    #credential = "C:\\Users\\aliu\\Documents\\client_secrets.JSON"
+    #file_link = 'https://drive.google.com/file/d/15lr3TmcB3cfyTKIHTV7x2UZGzXaIklFm/view?usp=sharing'
+    
+    ## Read the file from Google Drive
     file_id = file_link[file_link.find('/file/d')+8:file_link.find('/view')]
     file_name = "C:\\Users\\aliu\\Downloads\\stage_google_sheet.xlsx"
     
@@ -45,232 +49,161 @@ def get_Anaplan_TerritoryID_Master(file_link, credential):
         # Save the current credentials to a file
     gauth.SaveCredentialsFile("mycreds.txt")
 
+    print("Done Authentication")
+
     drive = GoogleDrive(gauth)
     downloaded = drive.CreateFile({'id': file_id})
     downloaded.GetContentFile(file_name) #download the google drive file into file_name
         
     report_date = datetime.strptime(downloaded.get('title')[37:47], "%m.%d.%Y").date()
 
-    print(report_date)
-
-#=======================================================================
-# Read the Territory ID master
-# from The Quota Master File - Reference - Territory Quotas sheet
-#=======================================================================
-def get_TerritoryID_Master(refresh = 1):
-
-    if (refresh == 1):
-        print ('Refreshing TerritoryID_Master', datetime.datetime.now().strftime("%Y-%m-%d %I:%M:%S %p"))
-        
-        #target = "FY2019 Quota Master - Local Research.xlsx"
-        #target = "FY2020 Quota Master - PRELIM Local.xlsx"
-        #target = "FY2020 Quota Master - PRELIM 03192019.xlsx"
-        #target = "Export Org Hierarchy 04.11.2019.xls"
-        #target = "Export Org Coverage and Quota SE Ops 05.01.2019.xls"
-        #target = "Export Org Coverage and Quota SE Ops 06.04.2019.xls"
-        #target = "Export Org Coverage and Quota SE Ops 07.08.2019.xls"
-        #target = "Export Org Coverage and Quota SE Ops 08.05.2019.xls"
-        #target = "Export Org Coverage and Quota SE Ops 09.04.2019.xls"
-        #target = "Export Org Coverage and Quota SE Ops 10.08.2019.xls"
-        #target = "Export Org Coverage and Quota SE Ops 11.05.2019.xls"
-        ####target = "Export Org Coverage and Quota SE Ops 12.06.2019.xls" ## last FY20 file
-        #target = 'SE Territory Quota Report.xls'
-        #target = 'Coverage and Quota Report by Month - 03.18.2020.xlsx'
-        #target = 'Coverage and Quota Report by Month - 03.31.2020.xlsx'
-        #target = 'Coverage and Quota Report by Month - 04.15.2020.xlsx'
-        #target = 'Coverage and Quota Report by Month - 05.04.2020.xlsx'
-        #target = 'Coverage and Quota Report by Month - 05.14.2020.xlsx'
-        #target = 'Coverage and Quota Report by Month - 06.09.2020.xlsx'
-        #target = 'Coverage and Quota Report by Month - 06.12.2020.xlsx'
-        #target = 'Coverage and Quota Report by Month - 08.17.2020.xlsx'        
-        #target = 'Coverage and Quota Report by Month - 09.04.2020.xlsx'
-        #target = 'Coverage and Quota Report by Month - 03.01.2021.xlsx'
-        #target = 'Coverage and Quota Report by Month - 03.05.2021.xlsx'
-        target = 'Coverage and Quota Report by Month - 04.01.2021.xlsx'
-
-        supplment = "Supplement.xlsx"
+    print("Read Google file")
+    
+    ## Load the data into data frame
+    supplment = "Supplement.xlsx"
              
-        prep_file = pd.read_excel(cfg.sup_folder + supplment, sheet_name='TerritoryID_Master', skiprows=3, header=0, usecols = "V:Z")
-        prep_file = prep_file[prep_file.Include == 1.0]
-        read_cols = ",".join(list(prep_file.Column))
-        new_names = list(prep_file.NewName)
-        data_type = dict(zip(prep_file.NewName, prep_file.DataType))
+    prep_file = pd.read_excel(cfg.sup_folder + supplment, sheet_name='TerritoryID_Master', skiprows=3, header=0, usecols = "V:Z")
+    prep_file = prep_file[prep_file.Include == 1.0]
+    read_cols = ",".join(list(prep_file.Column))
+    new_names = list(prep_file.NewName)
+    data_type = dict(zip(prep_file.NewName, prep_file.DataType))
           
-        output = pd.read_excel(cfg.source_data_folder + target, sheet_name='Sheet 1', skiprows=1, usecols=read_cols, names=new_names,
-                               dtypes=data_type, keep_default_na=True)        
+    output = pd.read_excel(file_name, sheet_name='Sheet 1', skiprows=1, usecols=read_cols, names=new_names, dtypes=data_type, keep_default_na=True)        
+    
+    print('Loaded into dataframe')
         
-        output = output[~output.Territory_ID.isnull()]
-        output['Short_Description'].replace('\n', "", regex=True, inplace=True)
-        #output.loc[output.Territory_ID=='OL_GLO_EMA_EMA_EG1','Short_Description'] = 'EMEA Globals (team 1)'
-        #output.loc[output.Territory_ID=='OL_GLO_EMA_EMA_EG2','Short_Description'] = 'EMEA Globals (team 2)'
-        #output.loc[output.Territory_ID=='OL_GLO_EMA_EMA','Short_Description'] = 'EMEA Globals'  
-        #a = output[output.Territory_ID=='WW_EMA_EEM_EMS_ZAR_002']['Territory_Description']
-        #b = a.str.replace('\n', " ") 
-        #output.loc[output.Territory_ID=='WW_EMA_EEM_EMS_ZAR_002','Territory_Description'] = b   
-        
-        Territory_Hierarchy = {0 : 'Hierarchy', 
-                               1 : 'Theater',
-    #                           2 : 'Super-Region',
-                               2 : 'Area',
-                               3 : 'Region',
-                               4 : 'District',
-                               5 : 'Territory'}
+    output = output[~output.Territory_ID.isnull()]
+    output['Short_Description'].replace('\n', "", regex=True, inplace=True)
+
+    Territory_Hierarchy = {0 : 'Hierarchy', 
+                           1 : 'Theater',
+                           2 : 'Area',
+                           3 : 'Region',
+                           4 : 'District',
+                           5 : 'Territory'}
     
         # check for duplicate Territory IDs
         #temp_pd = pd.pivot_table(output, index=["Territory_ID"], values=["Level"], aggfunc='count').rename(columns={'Level':'Rec_Count'})
         #temp = output.groupby('Territory_ID').tail(1) #select the tail of each group
         
-        # in case there is duplicate, take the last of the duplicate
-        output = output[output.Level.isin(Territory_Hierarchy.values())]
-        output = output.groupby('Territory_ID').tail(1)
+    # in case there is duplicate, take the last of the duplicate
+    output = output[output.Level.isin(Territory_Hierarchy.values())]
+    output = output.groupby('Territory_ID').tail(1)
         
-        # Using the Territory ID convention, find the territory hierarchy descriptions
-        temp = output['Territory_ID'].str.split('_', expand=True)
-        output = pd.merge(output, temp, how='left', left_index=True, right_index=True)
+    # Using the Territory ID convention, find the territory hierarchy descriptions
+    temp = output['Territory_ID'].str.split('_', expand=True)
+    output = pd.merge(output, temp, how='left', left_index=True, right_index=True)
         
-        for i in Territory_Hierarchy.keys():
-            temp = output[output.Level == Territory_Hierarchy[i]][['Territory_ID','Short_Description']]
-            output['temp_key'] = output[0]
-            for j in range(1,i+1):
-                output['temp_key'] = output['temp_key'].str.cat(output[j],sep='_')
-            output = pd.merge(output, temp, how = 'left', left_on=output['temp_key'], right_on='Territory_ID')
-            output.drop(['Territory_ID','Territory_ID_y'], axis=1, inplace=True)
-            output.rename(columns={'Short_Description_x':'Short_Description',
-                                   'Short_Description_y': Territory_Hierarchy[i], 
-                                   'Territory_ID_x':'Territory_ID'}, inplace=True)
+    for i in Territory_Hierarchy.keys():
+        temp = output[output.Level == Territory_Hierarchy[i]][['Territory_ID','Short_Description']]
+        output['temp_key'] = output[0]
+        for j in range(1,i+1):
+            output['temp_key'] = output['temp_key'].str.cat(output[j],sep='_')
+        output = pd.merge(output, temp, how = 'left', left_on=output['temp_key'], right_on='Territory_ID')
+        output.drop(['Territory_ID','Territory_ID_y'], axis=1, inplace=True)
+        output.rename(columns={'Short_Description_x':'Short_Description',
+                               'Short_Description_y': Territory_Hierarchy[i], 
+                               'Territory_ID_x':'Territory_ID'}, inplace=True)
             
-        output.drop(Territory_Hierarchy.keys(), axis=1, inplace=True)
-        output.drop(['temp_key'], axis=1, inplace=True)
+    output.drop(Territory_Hierarchy.keys(), axis=1, inplace=True)
+    output.drop(['temp_key'], axis=1, inplace=True)
    
-        #output.rename(columns = {'Super-Region':'Super_Region'}, inplace=True)
+    #output.rename(columns = {'Super-Region':'Super_Region'}, inplace=True)
                     
-        supplment = "TerritoryID_to_SFDC_SubDivision_Mapping.xlsx"
+    supplment = "TerritoryID_to_SFDC_SubDivision_Mapping.xlsx"
         
-        xls = pd.ExcelFile(cfg.sup_folder + supplment, on_demand = True)
-        sheets = xls.sheet_names
+    xls = pd.ExcelFile(cfg.sup_folder + supplment, on_demand = True)
+    sheets = xls.sheet_names
         
-        #FY20
-        #SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name=sheets[1], header=0, usecols = "F:I", names=['SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division', 'Territory_ID'])
+    #FY20
+    #SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name=sheets[1], header=0, usecols = "F:I", names=['SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division', 'Territory_ID'])
 
-        #FY21
-        #SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name='Anaplan-SFDC Map FY21', header=0, skiprows=1, usecols = "B,E:G", names=['Territory_ID','SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division'])
+    #FY21
+    #SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name='Anaplan-SFDC Map FY21', header=0, skiprows=1, usecols = "B,E:G", names=['Territory_ID','SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division'])
         
-        #FY22
-        SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name='Anaplan-SFDC Map FY22', header=0, skiprows=1, usecols = "B,H:J", names=['Territory_ID','SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division'])
+    #FY22
+    SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name='Anaplan-SFDC Map FY22', header=0, skiprows=1, usecols = "B,H:J", names=['Territory_ID','SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division'])
 
-        '''
-        for i in sheets[:1]:  # use the manual patched sheet
-            temp = pd.read_excel(cfg.sup_folder + supplment, sheet_name=i, header=0, usecols = "J:M",names=['SFDC_Theater','Division','Sub_Division', 'Territory_ID'])
-            #temp['Source'] = i
-            SFDC_sub_division= SFDC_sub_division.append(temp, sort=False)
-        '''
-        SFDC_sub_division = SFDC_sub_division[~SFDC_sub_division.Territory_ID.isnull()]
+    SFDC_sub_division = SFDC_sub_division[~SFDC_sub_division.Territory_ID.isnull()]
             
-        ID_Master = pd.merge(output, SFDC_sub_division, how='left', left_on='Territory_ID', right_on='Territory_ID')       
-        #ID_Master.loc[output.Theater=='Global Systems Integrator','Sub_Division'] = 'GSI'
-        #ID_Master.to_csv(cfg.output_folder+'TerritoryID_Master.txt', sep="|", index=False)     
+    ID_Master = pd.merge(output, SFDC_sub_division, how='left', left_on='Territory_ID', right_on='Territory_ID')       
+        
+    ## calculate the 1H, 2H and Annual quota
+    ID_Master['1H_M1_Quota'] = ID_Master['Q1_M1_Quota'] + ID_Master['Q2_M1_Quota']
+    ID_Master['2H_M1_Quota'] = ID_Master['Q3_M1_Quota'] + ID_Master['Q4_M1_Quota']
+    ID_Master['FY_M1_Quota'] = ID_Master['Q1_M1_Quota'] + ID_Master['Q2_M1_Quota'] + ID_Master['Q3_M1_Quota'] + ID_Master['Q4_M1_Quota']
 
-        
-        ## calculate the 1H, 2H and Annual quota
-        ID_Master['1H_M1_Quota'] = ID_Master['Q1_M1_Quota'] + ID_Master['Q2_M1_Quota']
-        ID_Master['2H_M1_Quota'] = ID_Master['Q3_M1_Quota'] + ID_Master['Q4_M1_Quota']
-        ID_Master['FY_M1_Quota'] = ID_Master['Q1_M1_Quota'] + ID_Master['Q2_M1_Quota'] + ID_Master['Q3_M1_Quota'] + ID_Master['Q4_M1_Quota']
+    ## calculate the 1H, 2H and Annual quota
+    ID_Master['1H_FB_Quota'] = ID_Master['Q1_FB_Quota'] + ID_Master['Q2_FB_Quota']
+    ID_Master['2H_FB_Quota'] = ID_Master['Q3_FB_Quota'] + ID_Master['Q4_FB_Quota']
+    ID_Master['FY_FB_Quota'] = ID_Master['Q1_FB_Quota'] + ID_Master['Q2_FB_Quota'] + ID_Master['Q3_FB_Quota'] + ID_Master['Q4_FB_Quota']
 
-        ## calculate the 1H, 2H and Annual quota
-        ID_Master['1H_FB_Quota'] = ID_Master['Q1_FB_Quota'] + ID_Master['Q2_FB_Quota']
-        ID_Master['2H_FB_Quota'] = ID_Master['Q3_FB_Quota'] + ID_Master['Q4_FB_Quota']
-        ID_Master['FY_FB_Quota'] = ID_Master['Q1_FB_Quota'] + ID_Master['Q2_FB_Quota'] + ID_Master['Q3_FB_Quota'] + ID_Master['Q4_FB_Quota']
+    Quota_assignment_col = ['Q1_M1_Quota','Q2_M1_Quota','Q3_M1_Quota', 'Q4_M1_Quota', '1H_M1_Quota','2H_M1_Quota','FY_M1_Quota',\
+                            'Q1_FB_Quota','Q2_FB_Quota','Q3_FB_Quota', 'Q4_FB_Quota', '1H_FB_Quota','2H_FB_Quota','FY_FB_Quota']
+    Territory_Quota = pd.melt(ID_Master, id_vars = ['Hierarchy','Theater','Area','Region','District', 'Territory','Territory_ID','SFDC_Theater','SFDC_Division','SFDC_Sub_Division','Level'],
+                   value_vars=Quota_assignment_col, var_name='Period',value_name='Quota')
+    Territory_Quota['Measure'] = Territory_Quota.Period.str[3:]
+    Territory_Quota['Period'] = Territory_Quota.Period.str[0:2]
+    Territory_Quota['Year'] = 'FY22'
 
-        Quota_assignment_col = ['Q1_M1_Quota','Q2_M1_Quota','Q3_M1_Quota', 'Q4_M1_Quota', '1H_M1_Quota','2H_M1_Quota','FY_M1_Quota',\
-                                'Q1_FB_Quota','Q2_FB_Quota','Q3_FB_Quota', 'Q4_FB_Quota', '1H_FB_Quota','2H_FB_Quota','FY_FB_Quota']
-               #'Super_Region',
-        Territory_Quota = pd.melt(ID_Master, id_vars = ['Hierarchy','Theater','Area','Region','District', 'Territory','Territory_ID','SFDC_Theater','SFDC_Division','SFDC_Sub_Division','Level'],
-                       value_vars=Quota_assignment_col, var_name='Period',value_name='Quota')
-        Territory_Quota['Measure'] = Territory_Quota.Period.str[3:]
-        Territory_Quota['Period'] = Territory_Quota.Period.str[0:2]
-        Territory_Quota['Year'] = 'FY22'
-       
-        ## writing to the database
-        # import pyodbc
-        from sqlalchemy import create_engine
-        from sqlalchemy import types as sqlalchemy_types
-            
-        server = 'ALIU-X1'
-        database = 'ALIU_DB1'
-        conn_str_local = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') #work
-        #sqlcon = create_engine("mssql+pyodbc://user:pwd@ALIU-X1") #work
+    ## writing to the database
+    from sqlalchemy import create_engine
+    from sqlalchemy import types as sqlalchemy_types
+           
+    server = 'ALIU-X1'
+    database = 'ALIU_DB1'
+    conn_str_local = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') #work
 
-        server = 'PS-SQL-Dev02'
-        database = 'SalesOps_DM'
-        conn_str = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') 
+    server = 'PS-SQL-Dev02'
+    database = 'SalesOps_DM'
+    conn_str = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') 
 
-        supplment = "Supplement.xlsx"        
-        to_sql_type = pd.read_excel(cfg.sup_folder + supplment, sheet_name = 'Output_DataTypes', header=0, usecols= "B:D")
-        TerritoryID_Master_type = to_sql_type[to_sql_type.DB_TableName == 'TerritoryID_Master']
+    supplment = "Supplement.xlsx"        
+    to_sql_type = pd.read_excel(cfg.sup_folder + supplment, sheet_name = 'Output_DataTypes', header=0, usecols= "B:D")
+    TerritoryID_Master_type = to_sql_type[to_sql_type.DB_TableName == 'TerritoryID_Master']
 
-        data_type={}
-        for i in range(0,len(TerritoryID_Master_type.Columns)):
-            data_type[TerritoryID_Master_type.iloc[i].Columns] = eval(TerritoryID_Master_type.iloc[i].DataType)
+    data_type={}
+    for i in range(0,len(TerritoryID_Master_type.Columns)):
+        data_type[TerritoryID_Master_type.iloc[i].Columns] = eval(TerritoryID_Master_type.iloc[i].DataType)
         
-        a = list(set(ID_Master.columns) - set(Quota_assignment_col))
-        ID_Master[a].to_sql('TerritoryID_Master_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype = data_type)
-        ID_Master[a].to_sql('TerritoryID_Master_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
-        #[ID_Master.Hierarchy != 'Other Overlay']
-        #ID_Master.to_csv(cfg.output_folder+'TerritoryID_Master_FY21.txt', sep="|", index=False)
+    a = list(set(ID_Master.columns) - set(Quota_assignment_col))
+    ID_Master[a].to_sql('TerritoryID_Master_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+    ID_Master[a].to_sql('TerritoryID_Master_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+    #[ID_Master.Hierarchy != 'Other Overlay']
+    #ID_Master.to_csv(cfg.output_folder+'TerritoryID_Master_FY21.txt', sep="|", index=False)
         
-        Territory_Quota_type = to_sql_type[to_sql_type.DB_TableName == 'Territory_Quota']
-        data_type = {}
-        for i in range(0, len(Territory_Quota_type.Columns)):
-            data_type[Territory_Quota_type.Columns.iloc[i]] = eval(Territory_Quota_type.DataType.iloc[i])
+    Territory_Quota_type = to_sql_type[to_sql_type.DB_TableName == 'Territory_Quota']
+    data_type = {}
+    for i in range(0, len(Territory_Quota_type.Columns)):
+        data_type[Territory_Quota_type.Columns.iloc[i]] = eval(Territory_Quota_type.DataType.iloc[i])
         
-        #Territory_Quota.to_csv(cfg.output_folder+'Territory_Quota_FY21.txt', sep="|", index=False)
-        #Territory_Quota[Territory_Quota.Hierarchy != 'Other Overlay'].to_sql('Territory_Quota_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
-        Territory_Quota.to_sql('Territory_Quota_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype = data_type)
-        Territory_Quota.to_sql('Territory_Quota_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
-        
-    else: # not refreshing
-        print ('Reading TerritoryID_Master from database')
-        
-        server = 'ALIU-X1'
-        database = 'ALIU_DB1'
-        table = 'TerritoryID_Master'
-        
-        cnxn = pyodbc.connect('DSN=ALIU-X1; Trust_Connection = yes',DRIVER='{ODBC Driver 13 for SQL Server}', SERVER=server, Database=database)
-        ID_Master = pd.read_sql('select * from ' + table, cnxn)
+    #Territory_Quota.to_csv(cfg.output_folder+'Territory_Quota_FY21.txt', sep="|", index=False)
+    #Territory_Quota[Territory_Quota.Hierarchy != 'Other Overlay'].to_sql('Territory_Quota_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+    print('Writing to ALIU-X1')
+    Territory_Quota.to_sql('Territory_Quota_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+
+    print('Writing to PS-SQL-Dev02.SalesOps_DM')
+    Territory_Quota.to_sql('Territory_Quota_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+
+    print('Done refresh Territory target')
+
+#=======================================================================
+# Read the Territory ID master
+# from The Quota Master File - Reference - Territory Quotas sheet
+#=======================================================================
+def get_TerritoryID_Master():
     
+    print ('Reading TerritoryID_Master from database')
+    
+    server = 'PS-SQL-Dev02'
+    database = 'SalesOps_DM'
+    table = 'SalesOps_DM.dbo.TerritoryID_Master_FY22'
+    
+    cnxn = pyodbc.connect('DSN=PS-SQL-Dev02; Trust_Connection = yes',DRIVER='{ODBC Driver 13 for SQL Server}', SERVER=server, Database=database)
+    ID_Master = pd.read_sql('select * from ' + table, cnxn)
     
     return(ID_Master)
 
-    # Code to refresh the District to Sub-Division mapping
-    '''
-    # Since there is not a master in SFDC, export from SFDC User an inventory of Theater, Division, Sub-Division & Territory
-    # to get a close to master list
-    # Territory ID is included to the dump if and only if a Active QBH is assigned to the territory
-    server = 'PS-SQL-PROD01'
-    database = 'PureDW_SFDC_staging'
-    target = 'SFDC_QBH_Territory'
-    
-    cnxn = pyodbc.connect('DSN=PS-SQL-PROD01; Trust_Connection = yes',DRIVER='{ODBC Driver 13 for SQL Server}', SERVER=server, Database=database)
-    f = open(cfg.sql_folder + target + '.sql')
-    tsql = f.read()
-    f.close()
-        
-    supplment = pd.read_sql(tsql,cnxn)
-    supplment_pivot = pd.pivot_table(supplment, index=['Theater__c','Division','Sub_Division__c','Territory_ID__c'], values = 'Name', aggfunc='count').reset_index()
-    supplment_pivot.drop(columns=['Name'], inplace=True)
-    
-    verify_map = pd.merge(output, supplment_pivot, how = 'left', left_on='Territory_ID', right_on='Territory_ID__c')  
-    
-    ## Special treatment for Global Systems Integrator since the Territory ID is not load into SFDC User
-    verify_map.loc[(output.Theater == 'Global Systems Integrator') & (output.Level=='Territory'), 'Division'] = 'Global System Integrators'
-    verify_map.loc[(output.Theater == 'Global Systems Integrator') & (output.Level=='Territory'), 'Sub_Division__c'] = 'GSI'
-   
-    verify_map = verify_map[['Level', 'Hierarchy', 'Theater', 'Super_Region', 'Region', 'District','Territory_ID','Segment','Type', 'Theater__c','Division', 'Sub_Division__c','Territory_ID__c']]
-    
-    # export a version for manual data clean up. 
-    verify_map.to_csv(cfg.output_folder+'TerritoryID_Master_4_verify_map.txt', sep="|", index=False)
-    '''
-           
 #===============================================================================
 # Read Quota data from the Quota Master Spreadsheet
 #===============================================================================
@@ -353,12 +286,13 @@ def get_anaplan_quota (refresh=1):
 # Shared by Lorrayne Gilbert
 #
 #===============================================================================
-    # help: https://medium.com/@ammar.nomany.tanvir/read-write-update-drive-excel-file-with-pydrive-f63134120ff9
+def refresh_Wavemaker_Report(file_link, credential) :   
     
-def get_Wavemaker_Report(file_link, credential) :   
+    print('Start refresh Wavemaker_report')
     
     file_id = file_link[file_link.find('/file/d')+8:file_link.find('/view')]
     file_name = "C:\\Users\\aliu\\Downloads\\stage_google_sheet.xlsx"
+    
     
     GoogleAuth.DEFAULT_SETTINGS['client_config_file'] = credential
     gauth = GoogleAuth()
@@ -376,11 +310,15 @@ def get_Wavemaker_Report(file_link, credential) :
         # Save the current credentials to a file
     gauth.SaveCredentialsFile("mycreds.txt")
     
+    print('done authentication')
+    
     drive = GoogleDrive(gauth)
     downloaded = drive.CreateFile({'id': file_id})
     downloaded.GetContentFile(file_name) #download the google drive file into file_name
     report_date = datetime.strptime(downloaded.get('title')[23:32], "%d %b %y").date()
-      
+    
+    print('got a stage file')  
+    
     #read from the Excel Report, save into a temp file without password
     import win32com.client
     import os
@@ -393,7 +331,6 @@ def get_Wavemaker_Report(file_link, credential) :
     xlsheet.SaveAs('C:\\Users\\aliu\\Downloads\\temp_WM_report.csv', FileFormat=62, Password = None) # answer overwrite
     xlwb.Close(SaveChanges=False) #answer do not save change
     
-    import pandas as pd
     df2 = pd.read_csv('C:\\Users\\aliu\\Downloads\\temp_WM_report.csv')
     df2['Report_date'] = report_date
     
@@ -409,16 +346,18 @@ def get_Wavemaker_Report(file_link, credential) :
                           "Log in count" : "Log_in_count"
                           }, inplace=True)
     
+    print('Load Dataframe')
+    
     sel_col = ['Report_date', 'ID','Name','Email', 'Company', 'WM_level','User_Id', 'Balance', 'Date_of_Registration', 'Last_Login',
            'Awarded_for_claims', 'Awarded_for_prizes','IsDisti?', 'PTM_Id', 'PTM_name','Activated?', 'Log_in_count']
     
     #write data into PS-SQL-Dev02.SalesOps_DM
-    #import pyodbc
     from sqlalchemy import create_engine
-    #from sqlalchemy import types as sqlalchemy_types
     server = 'PS-SQL-Dev02'
     database = 'SalesOps_DM'
     conn_str = create_engine('mssql+pyodbc://@' + server + '/' + database + '?driver=ODBC+Driver+13+for+SQL+Server') 
+    
+    print('Write to PS-SQL-Dev02')
     df2[sel_col].to_sql('WaveMake_Rpt_Insight', con=conn_str, if_exists='replace', schema="dbo", index=False)
 
     print('WaveMaker Report is loaded')
