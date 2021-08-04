@@ -8,7 +8,7 @@ With
 	Select Oppt.Id
 	from PureDW_SFDC_Staging.dbo.Opportunity Oppt
 	left join PureDW_SFDC_Staging.dbo.RecordType RecT on RecT.Id = Oppt.RecordTypeId
-	where Oppt.CloseDate >= '2021-02-05' and Oppt.CloseDate <= '2021-02-15'
+	--where Oppt.CloseDate >= '2021-02-05' and Oppt.CloseDate <= '2021-02-15'
 	--RecT.Name in ('Sales Opportunity')-- ('ES2 Opportunity')
 	--and Oppt.CloseDate >= '2018-02-05'-- and Oppt.CloseDate <= '2020-05-31'	
 	--where Oppt.Id = @Lookup_Oppt_Id
@@ -132,6 +132,7 @@ With
 
 /* bring a journal */
 Select * from #NS_Transactions_Journal
+--where Oppt_Id = '0064W00000vsHOuQAM'
 
 
 /* pivot the journal and calculate the Serial Number status */
@@ -152,7 +153,7 @@ group by Oppt_Id, Item_Id, Item_Name, [Serial Number]
 /**********************************/
 select 'Inventory Adjustment' as [Type]
 	, IA.TranID, IA.TranDate, IA.Status, IA.Memo
-	, IAL.Item_ID, Inv.inventory_number [Serial Number], IAL.Memo
+	, Prod.Item_Name, Inv.inventory_number [Serial Number], IAL.Memo
 	, IAL.Account_ID, Acc.Accountnumber, Acc.Account_Name	
 	, IAL.Location_ID, Loc.Name [Location]
 from NetSuite.dbo.STG_NetSuite_Transaction_Lines IAL
@@ -160,7 +161,9 @@ left join NetSuite.dbo.STG_NetSuite_Transactions IA on IA.Transaction_ID = IAL.T
 left join NetSuite.dbo.STG_NetSuite_Transaction_Inventory_Number Inv on Inv.transaction_id = IAL.Transaction_ID and Inv.transaction_line = IAL.Transaction_Line_ID
 left join NetSuite.dbo.STG_NetSuite_Accounts Acc on Acc.Account_ID = IAL.Account_ID
 left join NetSuite.dbo.STG_NetSuite_Locations Loc on Loc.Location_ID = IAL.Location_ID
+left join NetSuite.dbo.STG_NetSuite_Items Prod on Prod.Item_ID = IAL.Item_ID
 where IA.Transaction_Type = 'Inventory Adjustment'
-and (IA.Memo like '%TO[0-9]%' or IA.Memo like '%PUR-[0-9]')
+--and (IA.Memo like '%TO[0-9]%' or IA.Memo like '%PUR-[0-9]')
 and Inv.inventory_number is not null
-and IA.Create_Date >= '2021-02-01'
+--and IA.Create_Date >= '2021-02-01'
+and Inv.inventory_number in ('PCHFJ2004004E','PSPFT20080SD7','PSPFT20080SDA')

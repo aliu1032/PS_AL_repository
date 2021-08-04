@@ -89,7 +89,7 @@ With
 
 #FA_Sizer as (
 	select Email, Count(*) [Create_FA_Sizer_Cnt]
-	from [GPO_TSF_Dev].[dbo].[sizer_rs_action] Sizer
+	from [GPO_TSF_Dev ].dbo.v_fa_sizer_rs_action Sizer
 	where Sizer.email like '%purestorage.com' and Sizer.email != '' and Sizer.sizeraction = 'Create Sizing'
 	  and datemin >= getdate() - 90
 	group by Email

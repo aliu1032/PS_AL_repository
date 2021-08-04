@@ -168,7 +168,8 @@ with
 	) a where rn = 1
 )
 
-select #Report_Period.[FASizer_FiscalCreatedQuarter], #Report_Period.[FASizer_FiscalCreatedMonth], a.[Sizer_Session_Id], a.datemin, a.sizeraction
+select #Report_Period.[FASizer_FiscalCreatedQuarter], #Report_Period.[FASizer_FiscalCreatedMonth]
+	   --, a.[Sizer_Session_Id], a.datemin, a.sizeraction
 	   , a.[Contact Id], a.[Contact Name], a.[Contact Email]
 	   , a.[Partner Id], a.[Partner Name]
 	   , case when A.Type in ('Reseller','Distributor')
@@ -183,10 +184,11 @@ left join (
 			select convert(char(8), datemin, 112) [SizerCreate_Date_ID]
 				   , (FiscalYear + ' Q' + FiscalQuarter) [Sizer_FiscalCreatedQuarter]
 				   , cast((cast([FiscalYear] as varchar(4)) + right('0000' + cast([FiscalMonth] as varchar(2)), 2) + '01') as date) [Sizer_FiscalCreated_Month]
-				   , Sizer.Id [Sizer_Session_Id], Sizer.datemin, Sizer.sizeraction
+				   --, Sizer.Id [Sizer_Session_Id], Sizer.datemin, Sizer.sizeraction
 				   , C.Id [Contact Id], C.Name [Contact Name], Sizer.email [Contact Email]
 				   , P.Id [Partner Id], P.Name [Partner Name], P.Partner_Tier__c [Partner Tier], P.Theater__c [Partner Theater], P.Type
-				from [GPO_TSF_Dev].[dbo].[sizer_rs_action] Sizer
+				from [GPO_TSF_Dev ].dbo.v_fa_sizer_rs_action Sizer
+				   --from [GPO_TSF_Dev].[dbo].[sizer_rs_action] Sizer
 				left join #SFDC_Contact C on C.Email = Sizer.email
 				left join PureDW_SFDC_Staging.dbo.[Account] P on P.Id = C.AccountId
 				left join NetSuite.dbo.DM_Date_445_With_Past FiscalDate on FiscalDate.Date_ID = convert(char(8), datemin, 112)

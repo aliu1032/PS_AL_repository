@@ -138,7 +138,7 @@ for i in range(0,len(to_sql_type.Columns)):
     data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
                   
 Territory_assignment_L.to_sql('Territory_assignment_byName_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype=data_type)
-Territory_assignment_L.to_sql('Territory_assignment_byName_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+#Territory_assignment_L.to_sql('Territory_assignment_byName_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
 
 #------------------------------------------------------------------------------ 
 # Theoretically,
@@ -258,7 +258,7 @@ for i in range(0,len(to_sql_type.Columns)):
     data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
 
 Coverage_assignment_L.to_sql('Coverage_assignment_byName_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype=data_type)
-Coverage_assignment_L.to_sql('Coverage_assignment_byName_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+#Coverage_assignment_L.to_sql('Coverage_assignment_byName_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
 
 ''''''
 # Make an output of Coverage_assignment by Territory
@@ -329,7 +329,7 @@ Coverage_assignment_W.fillna('', inplace=True)
 #Coverage_assignment_W = Coverage_assignment_W.where(pd.notnull(Coverage_assignment_W),None)
 
 Coverage_assignment_W.to_sql('Coverage_assignment_byTerritory_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype=data_type)
-Coverage_assignment_W.to_sql('Coverage_assignment_byTerritory_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+#Coverage_assignment_W.to_sql('Coverage_assignment_byTerritory_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
 
 
 #------------------------------------------------------------------------------ 
@@ -433,7 +433,7 @@ for i in list(SE_quota_L.columns[:-3]):
 '''    
 
 SE_quota_L.to_sql('SE_Org_Quota_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype = data_type)
-SE_quota_L.to_sql('SE_Org_Quota_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+#SE_quota_L.to_sql('SE_Org_Quota_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
 
 ''' 
 ## dont' have the permission to drop table
@@ -533,7 +533,7 @@ for i in range(0,len(to_sql_type.Columns)):
     data_type[to_sql_type.Columns.iloc[i]] = eval(to_sql_type.DataType.iloc[i])
 
 District_Permission.to_sql('SE_District_Permission_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype=data_type)
-District_Permission.to_sql('SE_District_Permission_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
+#District_Permission.to_sql('SE_District_Permission_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype=data_type)
 
 
 '''

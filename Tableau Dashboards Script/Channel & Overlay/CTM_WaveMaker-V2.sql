@@ -35,7 +35,9 @@ Select C.Id [Contact_Id], Owner.Name [Contact Owner], C.IsDeleted, C.Owner_Is_Ac
   	 , C_Acct.Id [PartnerId], C_Acct.Name [Partner Name], P_CTM.Name [Partner PTM], C_Acct.Partner_Tier__c [Partner Tier]
   	 , C_Acct.Type [Partner Type] 
   	 , C_CTM.Name [Contact PTM]
-     , C.MailingCity [Contact City], C.MailingState [Contact State], C.MailingPostalCode [Contact PostalCode], C.MailingCountry [Contact Country]
+     , C.MailingCity [Contact City]
+     , coalesce(C.MailingState, ' ') as [Contact State], C.MailingPostalCode [Contact PostalCode]
+     , coalesce(C.MailingCountry, ' ') as [Contact Country]
      , left(C_User.Id,15) [Contact_UserId]
 from PureDW_SFDC_staging.dbo.[Contact] C
 left join PureDW_SFDC_Staging.dbo.[Account] C_Acct on C_Acct.Id = C.AccountId
@@ -522,5 +524,14 @@ Select Report_date, ID, Name, Email, Company, WM_Level, User_Id,
        [Activated?],
        Log_in_count [Login count]
 FROM [SalesOps_DM].[dbo].[WaveMake_Rpt_Insight]
- FROM [SalesOps_DM].[dbo].[WaveMake_Rpt_Insight]
+
+/***************************************************************************/
+/***                                                                     ***/
+/***    360 Activity Report                                              ***/
+/***                                                                     ***/
+/***************************************************************************/
+Select Report_date, User_Id, Activity, state, [Type], [Category], points_approved
+from [SalesOps_DM].[dbo].[Wavemaker_Activity_Report]
+where state in ('approved_l1','approved_l2', 'pending_l2')
+
   

@@ -32,19 +32,38 @@ order by a.Assessed_Date, a.Assessment
 --order by Assessee.Name, ctcoach__Behavior_Name__c
 
 
+
+/** https://connect.commercialtribe.net/reports/teams
+ * select 90 days
+ * drill down to Assessment distribution
+ * or
+ * SFDC Report https://purestorage.lightning.force.com/lightning/r/Report/00O4W000008ES2wUAG/view
+ */
+Select CS.Id,CS.Name [Assessment Number], ctcoach__Assessed_Date__c, Aor.Name [Assessor], Ase.Name [Assessee], ctcoach__Assessment_Map_Name__c,
+	CS.ctcoach__Assessor__c [Assessor_Id], CS.ctcoach__Assessee__c [Assessee_Id]
+from PureDW_SFDC_Staging.dbo.ctcoach__CT_Coach_Assessment__c CS
+left join PureDW_SFDC_staging.dbo.[User] Aor on Aor.Id = CS.ctcoach__Assessor__c
+left join PureDW_SFDC_staging.dbo.[User] Ase on Ase.Id = CS.ctcoach__Assessee__c
+where CS.Name ='CTCAssessment-002868'
+ctcoach__Assessed_Date__c >= getdate() - 90
+--ctcoach__Assessed_Date__c >= '2021-06-10' --and ctcoach__Assessed_Date__c <= '06-30-2021'
+ and Aor.Name = 'Christian Ruzak'
+  order by Ase.Name
+
 /* Debug */
 
 			select cast(CS.CreatedDate as Date) CreatedDate, cast(ctcoach__Assessed_Date__c as Date) Assessed_Date
---				   , Assessee.Name [Assessee], ctcoach__Assessee_Email__c [Assessee_Email], Assessee.EmployeeNumber [Assessee_EmployeeID]
+				   , Assessee.Name [Assessee]
+				   --, ctcoach__Assessee_Email__c [Assessee_Email], Assessee.EmployeeNumber [Assessee_EmployeeID]
 --				   , SE.Manager [Assessee_Manager], SE.Level3_Name Assessee_Director
 --				   , Assessor.Name [Assessor], Assessor.EmployeeNumber [Assessor_EmployeeID]
 --				   , SEM.Manager [Assessor_Manager], SEM.Level3_Name [Assessor_Director]
 				   , ctcoach__Assessment_Map_Name__c [Assessment], ctcoach__Average_Score__c [Score], 'Sales Activity' as Type
 				   , ctcoach__Opportunity__c Oppt_Id
 			from PureDW_SFDC_Staging.dbo.ctcoach__CT_Coach_Assessment__c CS
---			left join PureDW_SFDC_Staging.dbo.[User] Assessee on Assessee.Id = CS.ctcoach__Assessee__c
+			left join PureDW_SFDC_Staging.dbo.[User] Assessee on Assessee.Id = CS.ctcoach__Assessee__c
 --			left join PureDW_SFDC_Staging.dbo.[User] Assessor on Assessor.Id = CS.ctcoach__Assessor__c
-			where ctcoach__Assessor_Email__c in ('aalli@purestorage.com','grant.wilson@purestorage.com','jeff.sherrod@purestorage.com','tpound@purestorage.com')
+			where ctcoach__Assessor_Email__c in ('christian.ruzak@purestorage.com')
 
 select Id, Name, ctcoach__Assessment_Map_Name__c, ctcoach__Assessee_Email__c, ctcoach__Average_Score__c
 from PureDW_SFDC_staging.dbo.ctcoach__CT_Coach_Assessment__c

@@ -109,6 +109,23 @@ where Oppt.Id in (select * from #SFDC_Deal)
 
 /**********************************/
 /***                            ***/
+/***  SFDC Pickup Request       ***/
+/***                            ***/
+/**********************************/
+Select PUR.Name [PUR], PUR.Id [PUR_Id], PUR.Status__c, PUR.Cancel_Reason__c, PUR.Opportunity__c,
+	cast(PUR.Pickup_Date__c as Date) [Actual Pickup Date], cast(PUR.Delivery_POD_Date__c as Date) [Delivery/POD Date], 
+	PUR.Tracking_Number__c, PUR.Ship_Via__c,
+	PUR.Returned_Serial_Numbers__c [Returing Serial Numbers],
+	PUI.Alt_Netsuite_Order_Number__c [NS Transaction Ref ], PUI.Alt_Platform_PN__c [Product],
+	PUI.Alt_Serial_Number__c [Pickup Serial Number]
+from PureDW_SFDC_staging.dbo.Pickup_Item__c PUI
+left join PureDW_SFDC_staging.dbo.Pickup_Request__c PUR on PUR.Id = PUI.Pickup_Request__c
+where PUR.Name = 'PUR-08163'
+
+/** Misc Receive PUR PUR-08163 */
+
+/**********************************/
+/***                            ***/
 /***  SFDC Ship Assets          ***/
 /***                            ***/
 /**********************************/

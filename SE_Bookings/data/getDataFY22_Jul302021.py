@@ -7,9 +7,6 @@ Created on Jan 11, 2019
 import pandas as pd
 import pyodbc
 
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
-
 from datetime import datetime
 import project_config as cfg
 
@@ -21,101 +18,76 @@ import project_config as cfg
 # Anaplan Report
 # Google Folder: My Drive > SE Analytics > Analytics > Territory_Target
 #===============++++++++++========================================================
-def refresh_Anaplan_TerritoryID_Master(file_link, credential):
-    #import pydrive.files
+def refresh_Anaplan_TerritoryID_Master():
 
 # Moving the update into SQL Server Job = SEOps_Get_Territory_Quota using [Anaplan_DM].[dbo].[Territory Master SQL Export]
 
     print('Start process Anaplan Territory Quota file')
     
-    #credential = "C:\\Users\\aliu\\Documents\\client_secrets.JSON"
-    #file_link = 'https://drive.google.com/file/d/15lr3TmcB3cfyTKIHTV7x2UZGzXaIklFm/view?usp=sharing'
+    server = 'PS-SQL-Dev02'
+    database = 'Anaplan_DM'
+#    table = 'Anaplan_DM.dbo.[Territory Master SQL Export]'
     
-    ## Read the file from Google Drive
-    file_id = file_link[file_link.find('/file/d')+8:file_link.find('/view')]
-    file_name = "C:\\Users\\aliu\\Downloads\\stage_google_sheet.xlsx"
+    cnxn = pyodbc.connect('DSN=PS-SQL-Dev02; Trust_Connection = yes',DRIVER='{ODBC Driver 13 for SQL Server}', SERVER=server, Database=database)
+    query = (' Select [ID], [Level], [Territory L5] Short_Description, [Territory Role Type] [Type], [Territory Segment] Segment,'
+             ' right([Time],4) [Year], left([Time],2) [Period],'
+             ' [Position Discrete Quota] [M1_Quota], [Position FlashBlade Overlay Quota] [FB_Quota], [Position Partner Sourced Quota] [PSource_Quota],'
+             ' [Crediting Instructions]'
+             ' FROM [Anaplan_DM].[dbo].[Territory Master SQL Export]'
+             ' where [Time] like \'%FY22\''
+             )
+    ID_Master = pd.read_sql(query, cnxn)      
+    ID_Master['Report_date'] = datetime.today().strftime('%b-%d-%Y')
+
+    ID_Master['M1_Quota'] = ID_Master['M1_Quota'].astype('float', copy = False)
+    ID_Master['FB_Quota'] = ID_Master['FB_Quota'].astype('float', copy = False)
+    ID_Master['PSource_Quota'] = ID_Master['PSource_Quota'].astype('float', copy = False)
+
+    # Calculate the half year quota
+    Quota_col = ['ID','Period','M1_Quota','FB_Quota','PSource_Quota']
+    temp = pd.pivot_table(data=ID_Master[ID_Master.ID!=''][Quota_col], index = 'ID', columns = 'Period', values = ['M1_Quota','FB_Quota','PSource_Quota'])
+    temp.reset_index(inplace=True)
     
-    GoogleAuth.DEFAULT_SETTINGS['client_config_file'] = credential
-    gauth = GoogleAuth()
-
-    gauth.LoadCredentialsFile("mycreds.txt")
-    if gauth.credentials is None:
-        # Authenticate if they're not there
-        gauth.LocalWebserverAuth()
-    elif gauth.access_token_expired:
-        # Refresh them if expired
-        gauth.Refresh()
-    else:
-        # Initialize the saved creds
-        gauth.Authorize()
-        # Save the current credentials to a file
-    gauth.SaveCredentialsFile("mycreds.txt")
-
-    print("Done Authentication")
-
-    drive = GoogleDrive(gauth)
-    downloaded = drive.CreateFile({'id': file_id})
-    downloaded.GetContentFile(file_name) #download the google drive file into file_name
-        
-    report_date = datetime.strptime(downloaded.get('title')[37:47], "%m.%d.%Y").date()
-
-    print("Read Google file")
-    
-    ## Load the data into data frame
-    supplment = "Supplement.xlsx"
-             
-    prep_file = pd.read_excel(cfg.sup_folder + supplment, sheet_name='TerritoryID_Master', skiprows=3, header=0, usecols = "V:Z")
-    prep_file = prep_file[prep_file.Include == 1.0]
-    read_cols = ",".join(list(prep_file.Column))
-    new_names = list(prep_file.NewName)
-    data_type = dict(zip(prep_file.NewName, prep_file.DataType))
-          
-    output = pd.read_excel(file_name, sheet_name='Sheet 1', skiprows=1, usecols=read_cols, names=new_names, dtypes=data_type, keep_default_na=True)        
-    
-    print('Loaded into dataframe')
-        
-    output = output[~output.Territory_ID.isnull()]
-    output['Short_Description'].replace('\n', "", regex=True, inplace=True)
-
-    Territory_Hierarchy = {0 : 'Hierarchy', 
-                           1 : 'Theater',
-                           2 : 'Area',
-                           3 : 'Region',
-                           4 : 'District',
-                           5 : 'Territory'}
-    
-        # check for duplicate Territory IDs
-        #temp_pd = pd.pivot_table(output, index=["Territory_ID"], values=["Level"], aggfunc='count').rename(columns={'Level':'Rec_Count'})
-        #temp = output.groupby('Territory_ID').tail(1) #select the tail of each group
-        
-    # in case there is duplicate, take the last of the duplicate
-    output = output[output.Level.isin(Territory_Hierarchy.values())]
-    output = output.groupby('Territory_ID').tail(1)
-        
-    # Using the Territory ID convention, find the territory hierarchy descriptions
-    temp = output['Territory_ID'].str.split('_', expand=True)
-    output = pd.merge(output, temp, how='left', left_index=True, right_index=True)
-        
-    for i in Territory_Hierarchy.keys():
-        temp = output[output.Level == Territory_Hierarchy[i]][['Territory_ID','Short_Description']]
-        output['temp_key'] = output[0]
-        for j in range(1,i+1):
-            output['temp_key'] = output['temp_key'].str.cat(output[j],sep='_')
-        output = pd.merge(output, temp, how = 'left', left_on=output['temp_key'], right_on='Territory_ID')
-        output.drop(['Territory_ID','Territory_ID_y'], axis=1, inplace=True)
-        output.rename(columns={'Short_Description_x':'Short_Description',
-                               'Short_Description_y': Territory_Hierarchy[i], 
-                               'Territory_ID_x':'Territory_ID'}, inplace=True)
-            
-    output.drop(Territory_Hierarchy.keys(), axis=1, inplace=True)
-    output.drop(['temp_key'], axis=1, inplace=True)
+    temp['M1_Quota','1H'] = temp['M1_Quota','Q1'] + temp['M1_Quota','Q2']
+    temp['M1_Quota','2H'] = temp['M1_Quota','Q3'] + temp['M1_Quota','Q4']
+    temp['FB_Quota','1H'] = temp['FB_Quota','Q1'] + temp['FB_Quota','Q2']
+    temp['FB_Quota','2H'] = temp['FB_Quota','Q3'] + temp['FB_Quota','Q4']
+    temp['PSource_Quota','1H'] = temp['PSource_Quota','Q1'] + temp['PSource_Quota','Q2']
+    temp['PSource_Quota','2H'] = temp['PSource_Quota','Q3'] + temp['PSource_Quota','Q4']
+ 
+    temp.columns = ['_'.join(col) for col in temp.columns.values]
    
-    #output.rename(columns = {'Super-Region':'Super_Region'}, inplace=True)
-                    
-    supplment = "TerritoryID_to_SFDC_SubDivision_Mapping.xlsx"
+    # unpivot quota measures
+    ID_Master_Long = pd.melt(temp, id_vars = ['ID_'], value_vars=temp.columns[1:], var_name='Measure_Period', value_name = 'Quota')
+    ID_Master_Long['Measure'] = ID_Master_Long['Measure_Period'].str[:-3]
+    ID_Master_Long['Period'] = ID_Master_Long['Measure_Period'].str[-2:]
+
+    Master_col = ['ID','Level','Short_Description','Type','Segment','Year','Crediting Instructions','Report_date']
+    ID_Master_Long = pd.merge(ID_Master_Long, ID_Master[ID_Master['Period']=='FY'][Master_col], how='left', left_on='ID_', right_on = 'ID')
+    ID_Master_Long.drop(['ID_','Measure_Period'], axis=1, inplace=True)
+    
+
+    # Add the Hierarchy columns
+    # Create the Geo Hierarchy Description Dictionary   
+    Geo_Hierarchy = ['Hierarchy','Theater','Area','Region','District','Territory']    
+    Geo_Hierarchy_Dict = []    
+    for i in range(0,len(Geo_Hierarchy)) :
+        keys = ID_Master_Long[ID_Master_Long.Level == Geo_Hierarchy[i]]['ID']
+        values = ID_Master_Long[ID_Master_Long.Level == Geo_Hierarchy[i]]['Short_Description']        
+        Geo_Hierarchy_Dict.append(dict(zip(keys,values)))       
         
-    xls = pd.ExcelFile(cfg.sup_folder + supplment, on_demand = True)
-    sheets = xls.sheet_names
+    # Replace the Hierarchy description by looking up the code in dictionary
+    Geo_Hierarchy_ID_Len = [2, 6, 10, 14, 18, 22]
+    for i in range(0,len(Geo_Hierarchy)):
+        ID_Len = Geo_Hierarchy_ID_Len[i]
+        ID_Master_Long[Geo_Hierarchy[i]] = ID_Master_Long['ID'].str[:ID_Len]
+        ID_Master_Long[Geo_Hierarchy[i]] = ID_Master_Long[Geo_Hierarchy[i]].map(Geo_Hierarchy_Dict[i])
+          
+    ## Load the data into data frame
+
+    # Read the static Anaplan Hierarchy mapping with SFDC Hierarchy
+    supplment = "TerritoryID_to_SFDC_SubDivision_Mapping.xlsx"        
+    #xls = pd.ExcelFile(cfg.sup_folder + supplment, on_demand = True)
         
     #FY20
     #SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name=sheets[1], header=0, usecols = "F:I", names=['SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division', 'Territory_ID'])
@@ -125,28 +97,10 @@ def refresh_Anaplan_TerritoryID_Master(file_link, credential):
         
     #FY22
     SFDC_sub_division = pd.read_excel(cfg.sup_folder + supplment, sheet_name='Anaplan-SFDC Map FY22', header=0, skiprows=1, usecols = "B,H:J", names=['Territory_ID','SFDC_Theater','SFDC_Division', 'SFDC_Sub_Division'])
-
     SFDC_sub_division = SFDC_sub_division[~SFDC_sub_division.Territory_ID.isnull()]
-            
-    ID_Master = pd.merge(output, SFDC_sub_division, how='left', left_on='Territory_ID', right_on='Territory_ID')       
-        
-    ## calculate the 1H, 2H and Annual quota
-    ID_Master['1H_M1_Quota'] = ID_Master['Q1_M1_Quota'] + ID_Master['Q2_M1_Quota']
-    ID_Master['2H_M1_Quota'] = ID_Master['Q3_M1_Quota'] + ID_Master['Q4_M1_Quota']
-    ID_Master['FY_M1_Quota'] = ID_Master['Q1_M1_Quota'] + ID_Master['Q2_M1_Quota'] + ID_Master['Q3_M1_Quota'] + ID_Master['Q4_M1_Quota']
-
-    ## calculate the 1H, 2H and Annual quota
-    ID_Master['1H_FB_Quota'] = ID_Master['Q1_FB_Quota'] + ID_Master['Q2_FB_Quota']
-    ID_Master['2H_FB_Quota'] = ID_Master['Q3_FB_Quota'] + ID_Master['Q4_FB_Quota']
-    ID_Master['FY_FB_Quota'] = ID_Master['Q1_FB_Quota'] + ID_Master['Q2_FB_Quota'] + ID_Master['Q3_FB_Quota'] + ID_Master['Q4_FB_Quota']
-
-    Quota_assignment_col = ['Q1_M1_Quota','Q2_M1_Quota','Q3_M1_Quota', 'Q4_M1_Quota', '1H_M1_Quota','2H_M1_Quota','FY_M1_Quota',\
-                            'Q1_FB_Quota','Q2_FB_Quota','Q3_FB_Quota', 'Q4_FB_Quota', '1H_FB_Quota','2H_FB_Quota','FY_FB_Quota']
-    Territory_Quota = pd.melt(ID_Master, id_vars = ['Hierarchy','Theater','Area','Region','District', 'Territory','Territory_ID','SFDC_Theater','SFDC_Division','SFDC_Sub_Division','Level'],
-                   value_vars=Quota_assignment_col, var_name='Period',value_name='Quota')
-    Territory_Quota['Measure'] = Territory_Quota.Period.str[3:]
-    Territory_Quota['Period'] = Territory_Quota.Period.str[0:2]
-    Territory_Quota['Year'] = 'FY22'
+    ID_Master_Long = pd.merge(ID_Master_Long, SFDC_sub_division, how='left', left_on='ID', right_on='Territory_ID')     
+    ID_Master_Long.drop(['Territory_ID'], axis=1, inplace=True)  
+    ID_Master_Long.rename(columns = {'ID': 'Territory_ID'}, inplace=True)
 
     ## writing to the database
     from sqlalchemy import create_engine
@@ -168,24 +122,31 @@ def refresh_Anaplan_TerritoryID_Master(file_link, credential):
     for i in range(0,len(TerritoryID_Master_type.Columns)):
         data_type[TerritoryID_Master_type.iloc[i].Columns] = eval(TerritoryID_Master_type.iloc[i].DataType)
         
-    a = list(set(ID_Master.columns) - set(Quota_assignment_col))
-    ID_Master[a].to_sql('TerritoryID_Master_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype = data_type)
-    ID_Master[a].to_sql('TerritoryID_Master_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
-    #[ID_Master.Hierarchy != 'Other Overlay']
-    #ID_Master.to_csv(cfg.output_folder+'TerritoryID_Master_FY21.txt', sep="|", index=False)
-        
+    Master_col = ['Territory_ID', 'Short_Description',
+                  'Hierarchy', 'Theater', 'Area', 'Region', 'District', 'Territory',
+                  'Level', 'Type', 'Segment',  'Crediting Instructions', 'Report_date',
+                  'SFDC_Theater', 'SFDC_Division', 'SFDC_Sub_Division']
+    
+    # Write TerritoryID_Master
+    ID_Master_Long[(ID_Master_Long['Period']=='FY') & (ID_Master_Long['Measure'] == 'M1_Quota')][Master_col].to_sql('TerritoryID_Master_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+    ID_Master_Long[(ID_Master_Long['Period']=='FY') & (ID_Master_Long['Measure'] == 'M1_Quota')][Master_col].to_sql('TerritoryID_Master_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+ 
+    Quota_col = ['Year','Period', 'Measure', 'Quota',
+                 'Territory_ID', 'Short_Description', 
+                  'Hierarchy', 'Theater', 'Area', 'Region', 'District', 'Territory',
+                  'Level', 'Type', 'Segment', 'Report_date',
+                  'SFDC_Theater', 'SFDC_Division', 'SFDC_Sub_Division']
+       
     Territory_Quota_type = to_sql_type[to_sql_type.DB_TableName == 'Territory_Quota']
     data_type = {}
     for i in range(0, len(Territory_Quota_type.Columns)):
         data_type[Territory_Quota_type.Columns.iloc[i]] = eval(Territory_Quota_type.DataType.iloc[i])
         
-    #Territory_Quota.to_csv(cfg.output_folder+'Territory_Quota_FY21.txt', sep="|", index=False)
-    #Territory_Quota[Territory_Quota.Hierarchy != 'Other Overlay'].to_sql('Territory_Quota_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
     print('Writing to ALIU-X1')
-    Territory_Quota.to_sql('Territory_Quota_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+    ID_Master_Long[Quota_col].to_sql('Territory_Quota_FY22', con=conn_str_local, if_exists='replace', schema="dbo", index=False, dtype = data_type)
 
     print('Writing to PS-SQL-Dev02.SalesOps_DM')
-    Territory_Quota.to_sql('Territory_Quota_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
+    ID_Master_Long[Quota_col].to_sql('Territory_Quota_FY22', con=conn_str, if_exists='replace', schema="dbo", index=False, dtype = data_type)
 
     print('Done refresh Territory target')
 
@@ -215,14 +176,17 @@ def get_anaplan_quota (refresh=1):
 
     server = 'PS-SQL-Dev02'
     database = 'Anaplan_DM'
-    table = 'dbo.Employee_Territory_And_Quota'
+    # table = 'dbo.Employee_Territory_And_Quota'
     
-   #[Headcount_Group]        
+    #[Headcount_Group]        
     cnxn = pyodbc.connect('DSN=PS-SQL-Dev02; Trust_Connection = yes',DRIVER='{ODBC Driver 13 for SQL Server}', SERVER=server, Database=database)
     query = (
-    'select \'FY22\' [Year], [Time] [Report_Date], [Workday Employees E1] Name, [Employee ID] [EmployeeID], [Email - Primary Work] [Email], [SFDC User ID] [SFDC_UserID],'
+    'select \'FY22\' [Year], [Time] [Report_Date],'
+    '       [Workday Employees E1] Name, [Employee ID] [EmployeeID], [Email - Primary Work] [Email], [SFDC User ID] [SFDC_UserID],'
     '       Manager, [Manager ID] [Manager_EmployeeID], [Termination Date] Termination_Date,'
+    '       [Hire Date] Hire_Date, '
     '       [Job Title] [Title], [Sales Group 4] [Resource_Group],'
+    ''
     '       [Plan Name] [Plan_Name], substring([Plan Name], CHARINDEX(\'(\',[Plan Name])+1, CHARINDEX(\')\',[Plan Name]+\')\')-CHARINDEX(\'(\',[Plan Name]) -1  ) [Plan_Code],'
     '       [Measure 1 Plan Effective Date] [Effective_Date],'
     '       [Measure 1 Coverage Assignment ID] [M1_Territory_IDs], [Measure 1 Theater] [M1_Theater], [Measure 1 Super-Region] [M1_Area], [Measure 1 Region] [M1_Region],'
@@ -237,11 +201,43 @@ def get_anaplan_quota (refresh=1):
     '' 
     'from Anaplan_DM.dbo.Employee_Territory_And_Quota'
     )
+    Emp_Territory_Quota = pd.read_sql(query, cnxn)
     
-    output = pd.read_sql(query, cnxn)
+    # Read SE_Org
+    query1 = ('Select cast(EmployeeID as varchar) EmployeeID, Role [SE_Role], Level [SE_Level] from [GPO_TSF_Dev ].[dbo].vSE_org')
+    se_org = pd.read_sql(query1, cnxn)
+    
     cnxn.close()
 
-  
+
+    output = pd.merge(Emp_Territory_Quota, se_org, how = 'left', on='EmployeeID')
+
+    # Use Sales Group 4 from Anaplan and Role & Level from SE Org to derive the GTM_Role    
+    output['GTM_Role'] = output['Resource_Group']
+    output.loc[output['Resource_Group'].isin(['Sales Mgmt','Sales Mgmt QBH','RSD','DM','ISR Mgmt','SDR Mgmt']), 'GTM_Role'] = 'Sales Mgmt' 
+    output.loc[output['Resource_Group'].isin(['Global AE', 'GSI AE', 'ISO ISR', 'ISO SDR']), 'GTM_Role'] = 'Sales AE'
+    output.loc[output['Resource_Group'].isin(['GSI SE', 'Direct SE']), 'GTM_Role'] = 'SE'
+    output.loc[output['Resource_Group'].isin(['FB SE']), 'GTM_Role'] = 'DA'
+    output.loc[output['Resource_Group'].isin(['Solution Specialist IC']), 'GTM_Role'] = 'FSA'
+    output.loc[output['Resource_Group'].isin(['Solution Specialist Mgmt']), 'GTM_Role'] = 'FSA Mgmt'
+    output.loc[output['EmployeeID'] == '103058','GTM_Role'] = 'Sales Mgmt'  #overwrite for Brian Carpenter
+    
+    # overwrite by SE org
+    output.loc[~(output['SE_Role'].isna()) & (output['SE_Level']=='Standard'), 'GTM_Role'] = output.loc[~(output['SE_Role'].isna()) & (output['SE_Level']=='Standard'), 'SE_Role']   
+    output.loc[output['SE_Role'].isin(['ISE', 'GSI','MSP']), 'GTM_Role'] = 'SE'  # SEs assigned to 'special' territories
+    output.loc[(output['SE_Role']=='SE') & (output['SE_Level']=='PRINCIPAL'), 'GTM_Role'] = 'PTS'  
+    output.loc[(output['SE_Role']=='SE') & ~(output['SE_Level'].isin(['Standard','PRINCIPAL'])), 'GTM_Role'] = 'SE Mgmt'  
+    output.loc[(output['SE_Role']=='FSA') & ~(output['SE_Level'].isin(['Standard','PRINCIPAL'])), 'GTM_Role'] = 'FSA Mgmt'  
+    output.loc[(output['SE_Role']=='DA') & (output['SE_Level'] != 'Standard'), 'GTM_Role'] = 'DA Mgmt'  
+    output.loc[(output['SE_Role']=='PTM') & (output['SE_Level'] != 'Standard'), 'GTM_Role'] = 'PTD'  
+
+    # Hack
+    output.loc[output.Name== 'Steven Keogh', 'M1_Territory_IDs'] = 'OL_EGA_EGA'
+
+    output = output[(output.Termination_Date=='')] 
+    return output
+   
+''' 
     #override [Sales Group 4] to get some AE : SE mapping , Global Accounts : OL_EGA_EGA*
     #1 : Put Steven Keogh's group, i.e. to Global SE, since the AE resource Global AE
     output.loc[output.Manager == 'Steven Keogh', 'Resource_Group'] = 'Global SE'
@@ -267,7 +263,7 @@ def get_anaplan_quota (refresh=1):
     #5: Hack
     output.loc[output.Name== 'Steven Keogh', 'Resource_Group'] = 'SE Mgmt'
     output.loc[output.Name== 'Steven Keogh', 'M1_Territory_IDs'] = 'OL_EGA_EGA'
-    
+'''    
 #   
 #     update_type = ['Plan_Effective_Date','Plan_Change_Date','Termination_Plan_End_Date']
 #     for i in update_type:
@@ -278,8 +274,7 @@ def get_anaplan_quota (refresh=1):
     #output = output[(output.M1_Territory_IDs!='No Plan / No Coverage') & (~output.M1_Territory_IDs.isnull())]
     # drop the resources who left the company
     #output = output[(output.Termination_Date.isnull())] 
-    output = output[(output.Termination_Date=='')] 
-    return output
+
 
 #===============================================================================
 # Read 360Insight Wavemaker Report file
@@ -289,6 +284,9 @@ def get_anaplan_quota (refresh=1):
 #
 #===============================================================================
 def refresh_Wavemaker_Report(file_link, credential) :   
+   
+    from pydrive.auth import GoogleAuth
+    from pydrive.drive import GoogleDrive
     
     print('Start refresh Wavemaker_report')
     
