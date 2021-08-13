@@ -104,26 +104,19 @@ SE_Subordinate_Permission = pd.merge(SE_Subordinate_Permission, output[['Name','
 SE_Subordinate_Permission.drop('Managers_EmployeeID', axis=1, inplace=True)
 
 
-# remove these rows as Shawn's direct report have access to Global view
-#Zack Murphy, Scott Deman, Nathan Hall, Carl McQuillan
-Special_Need = output[((output.Role == 'PTM') & (output.Manager=='Julie Rosenberg')) | (output.Role == 'HQ')][['Name', 'Role', 'Manager']].sort_values(['Role'])
-
+# Special assignment 
+Special_Need = output[output.Name=='Yi Shuen Chin'][['Name', 'EmployeeID', 'Email', 'Role', 'Manager']].sort_values(['Role'])
 SE_Subordinate_Permission = SE_Subordinate_Permission[~SE_Subordinate_Permission.Name.isin(Special_Need['Name'])]
 
-# Name, Email, EployeeID
+# Name, Email, EmployeeID, List of user to copy from
 extra_users = { 'April Liu' : ['aliu@purestorage.com','104663', ['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
                 'Steve Gordon' :['sgordon@purestorage.com','105394', ['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
- #               'Jim Adcox' :['jadcox@purestorage.com','103574', ['Nathan Hall', 'Shawn Rosemarin','Carl McQuillan']], 
                 'George Lopez' :['glopez@purestorage.com','102307', ['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
                 'Rick Lindgren' :['rlindgren@purestorage.com','104088', ['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
- #               'Tiffany Lieberman' :['tlieberman@purestorage.com','104532', ['Nathan Hall', 'Shawn Rosemarin','Carl McQuillan']],
                 'Elise Linker' :['elinker@purestorage.com','107315', ['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
                 'Thomas Waung' :['twaung@purestorage.com','103800', ['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
+                'Andrew May' :['amay@purestorage.com','103800', ['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
                 'Veronika Dunkley' :['vdunkley@purestorage.com','103357', ['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
- #               'Zack Murphy' :['zack.murphy@purestorage.com','100538', ['Nathan Hall', 'Shawn Rosemarin','Carl McQuillan']],
- #               'Scott Dedman' :['sdedman@purestorage.com','103248', ['Nathan Hall', 'Shawn Rosemarin','Carl McQuillan']],
- #               'Nathan Hall' :['nhall@purestorage.com','103703', ['Nathan Hall', 'Shawn Rosemarin','Carl McQuillan']],
- #               'Carl McQuillan' :['carl@purestorage.com','100271', ['Nathan Hall', 'Shawn Rosemarin','Carl McQuillan']],
                 'Deny Patel' : ['depatel@purestorage.com','105693', ['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
                 'Julie Rosenberg' : ['julie@purestorage.com','101247',['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
                 'Chadwick Short' : ['chad.short@purestorage.com','101059', ['Michael Richardson']],
@@ -138,12 +131,11 @@ extra_users = { 'April Liu' : ['aliu@purestorage.com','104663', ['Michael Richar
                 'Willy Vega' : ['wvega@purestorage.com', '103426',['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
                 'Naomi Newport' : ['nnewport@purestorage.com', '101468',['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
                 'Sabine Cronin' : ['scronin@purestorage.com', '107153',['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
-                'Khang Huynh' : ['khhuynh@purestorage.com', '102469',['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
                 'Lauren Futris' : ['lfutris@purestorage.com', '108451',['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
                 'Nathan Hall' : ['nhall@purestorage.com' , '103703',['Michael Richardson', 'Zack Murphy','Carl McQuillan']],
                 'Carmen Summers' : ['csummers@purestorage.com', '106941', ['Michael Richardson']],
-                'Chris Hansen' : ['chhansen@purestorage.com','107696',['Michael Richardson']]
-#                'Jessie Jiang' : ['jjiang@purestorage.com', '105358',['Nathan Hall', 'Shawn Rosemarin','Carl McQuillan']]                    
+                'Chris Hansen' : ['chhansen@purestorage.com','107696',['Michael Richardson']],
+                'Yi Shuen Chin' : ['ychin@purestorage.com','102448',['Pratyush Khare']]
                }
 
 for i in list(extra_users.keys()):

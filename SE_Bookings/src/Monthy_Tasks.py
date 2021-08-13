@@ -10,9 +10,10 @@ credential = "C:\\Users\\aliu\\Documents\\client_secrets.JSON"
 ## CY2021 folder
 #WaveMaker_Report_Link = 'https://drive.google.com/file/d/1XQCG2bvPVBW7juXMjD4VTK7TmX61hAW5/view?usp=sharing' #05.28
 #WaveMaker_Report_Link = 'https://drive.google.com/file/d/1KVq9P9MprwAzWqmTrhRnDk5q51mJq2ql/view?usp=sharing' #6.06
-WaveMaker_Report_Link = 'https://drive.google.com/file/d/1aRfI-e--XEXAJWvzYJBZPRhvnsjiR-Oq/view?usp=sharing'  #07.05
+#WaveMaker_Report_Link = 'https://drive.google.com/file/d/1aRfI-e--XEXAJWvzYJBZPRhvnsjiR-Oq/view?usp=sharing'  #07.05
+WaveMaker_Report_Link = 'https://drive.google.com/file/d/15qUJ8XzLLdj66UNEv7myu34jFg7d7qKQ/view?usp=sharing' #07.29
 ## My Drive / SE Analytics / Analytics / Territory_Target : https://drive.google.com/drive/u/0/folders/1vT46et8e2sZQIehE2rMNsIt8SoqwUD51
-Anaplan_Territory_Target_Link = 'https://drive.google.com/file/d/1ObwGSdApZqiu0wn95GVPHV36mnCRP65b/view?usp=sharing' #06.01
+#Anaplan_Territory_Target_Link = 'https://drive.google.com/file/d/1ObwGSdApZqiu0wn95GVPHV36mnCRP65b/view?usp=sharing' #06.01
 
 
 '''
@@ -46,14 +47,16 @@ from getDataFY22 import refresh_Wavemaker_Report
 refresh_Wavemaker_Report(WaveMaker_Report_Link, credential)
 
 
-# Refresh Territory Quota : updating the TerritoryID_Master table use to derive District Permission.
-# Tableau dashboards are pulling CFY from Anaplan_DM
-# from getDataFY22 import refresh_Anaplan_TerritoryID_Master
-# refresh_Anaplan_TerritoryID_Master(Anaplan_Territory_Target_Link, credential)
+# Refresh Territory Quota
+# update TerritoryID_Master
+# update Territory_Quota_FY22 used in SEM-Metrics
 from getDataFY22_Jul302021 import refresh_Anaplan_TerritoryID_Master
 refresh_Anaplan_TerritoryID_Master()
 
+# from getDataFY22 import refresh_Anaplan_TerritoryID_Master
+# refresh_Anaplan_TerritoryID_Master(Anaplan_Territory_Target_Link, credential)
 
+print('Start SE_Quota_ETL')
 import SE_Quota_ETL_FY22_Jul302021
 # Using on Anaplan Coverage assignment information: create output
 # Territory_assignment_byName : break out the comma-delimited coverage ID into rows. (Territory_assignment_L)
@@ -64,11 +67,12 @@ import SE_Quota_ETL_FY22_Jul302021
 # Jul 30, 2021
 # update ETL to pull CFY Territory_ID_master from Anaplan_DM
 
+print('Start Subordinate Permission update')
 import SE_Org_Subordinate_Permission_FY22 
 # setup the permission for Managers to view subordinate records
 # use in SE Team Metrics, SE_Attainment
 
-
+print('Done monthly tasks')
 import datetime
 print ('Process Start ', datetime.datetime.now())
 for i in range(0,20) :

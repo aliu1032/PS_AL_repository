@@ -204,7 +204,7 @@ def get_anaplan_quota (refresh=1):
     Emp_Territory_Quota = pd.read_sql(query, cnxn)
     
     # Read SE_Org
-    query1 = ('Select cast(EmployeeID as varchar) EmployeeID, Role [SE_Role], Level [SE_Level] from [GPO_TSF_Dev ].[dbo].vSE_org')
+    query1 = ('Select cast(EmployeeID as varchar) EmployeeID, Role [SE_Role], Level [SE_Level], [IC_MGR] from [GPO_TSF_Dev ].[dbo].vSE_org')
     se_org = pd.read_sql(query1, cnxn)
     
     cnxn.close()

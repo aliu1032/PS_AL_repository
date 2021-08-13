@@ -365,6 +365,80 @@ as (
 			   Territory_ID [ID], Short_Description, Level, Segment, Type, [Year]
 		from SalesOps_DM.dbo.Territory_Quota_FY19_21
 		where Period ='FY' and Measure = 'M1_Quota'
+		
+		Union
+		----Assume the FY22 Territories are the same in FY23 ----
+				SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, CFY.[Territory L5] [Territory], 
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], 'FY23' as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Territory' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory], 
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], 'FY23' as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'District' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory],
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], 'FY23' as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Region' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory],
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], 'FY23' as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Area' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory],
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], 'FY23' as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Theater' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory],
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], 'FY23' as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Hierarchy' and [Time] = 'FY22'
+		-------------------------
+
 ),
 
 /* M1 Quota */
@@ -452,6 +526,20 @@ as (
 			UNPIVOT
 			( Quota for [Period] in ([Q3],[Q4])
 			) unpvt			
+
+		------------ Insert dummpy for FY23 ----------------------------------
+		UNION
+		Select ID, [Level], [Year], [Period], cast(Half_Quota as decimal(18,2)) [Half_Quota], cast(Annual_Quota as decimal(18,2)), cast(Qtrly_Quota as decimal(18,2))  from
+			(
+			Select ID, [Level], [Year], 0 [Half_Quota], 0 [Annual_Quota],
+				   0 [FY23 Q1], 0 [FY23 Q2], 0 [FY23 Q3], 0 [FY23 Q4]
+			from #FY19_CFY_Territory
+			where [Year] = 'FY23' 
+			--and ID = 'WW_AMS_COM_CEN_TEN_001'
+			) as src
+			UNPIVOT
+			( [Qtrly_Quota] for [Period] in ([FY23 Q1], [FY23 Q2], [FY23 Q3], [FY23 Q4])
+			) as unpvt		
 ),
 
 #Ter_Master_and_M1_Quota as (
@@ -693,8 +781,8 @@ Select
 					where O.Id in (Select * from #Select_Oppt)
 					--and O.Partner_Account__c is not null  --- Selecting Capax and PaaS Oppt where Partner Account is stamped
 		) Oppt on Ter_Master.[Territory_ID] = Oppt.Split_Territory_ID and Ter_Master.[Year] = Oppt.[Fiscal Close Year] and Ter_Master.[Period] = Oppt.[Fiscal Close Quarter]
-
-		where Oppt.[Oppt Id] = '0064W00000xfiiaQAA'-- '0064W00000yviRtQAI'
+		where Oppt.[Fiscal Close Year] = 'FY23' and Oppt.Split_Territory_ID = 'WW_AMS_COM_NEA_CPK_001' 
+		--where Oppt.[Oppt Id] = '0064W00000xfiiaQAA'-- '0064W00000yviRtQAI'
 
 /****************************************************/
 /* Opportunity Portfolio breakdown using Oppt Split */
