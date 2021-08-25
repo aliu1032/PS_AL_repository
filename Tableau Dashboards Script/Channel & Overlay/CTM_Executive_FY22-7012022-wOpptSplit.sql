@@ -469,7 +469,7 @@ as (
 	select ID, [Level], Right(Period_Yr, 4) [Year], Right(Period_Yr, 4) + ' ' + left(Period_Yr,2) [Period], [Quota] [Qtrly_Quota], [Half_Quota], [Annual_Quota]
 	from
 		( 
-		select ID, [Level], [Q3 FY22], [Q4 FY22], [Q3 FY22] + [Q3 FY22] as [Half_Quota], [FY22] [Annual_Quota]
+		select ID, [Level], [Q3 FY22], [Q4 FY22], [Q3 FY22] + [Q4 FY22] as [Half_Quota], [FY22] [Annual_Quota]
 		from
 			(
 					select ID, [Level], [Time], cast([Position Discrete Quota] as decimal(18,2)) [M1_Quota]

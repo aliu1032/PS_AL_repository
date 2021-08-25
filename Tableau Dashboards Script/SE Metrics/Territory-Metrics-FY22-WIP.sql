@@ -1,3 +1,4 @@
+/*** Script used in Territory Analysis Version 2 */
 select *
 from SalesOps_DM.dbo.TerritoryID_Master_FY22
 
@@ -44,6 +45,333 @@ left join
 		) AP on AP.Account__c = A.Id
 where A.IsDeleted = 'false'
 
+/*****************************************/
+/*                                       */
+/*   Territory Master & Quota            */
+/*                                       */
+/*****************************************/
+With
+#L1 AS (
+	select ID, [Territory L5] [Hierarchy]
+	from Anaplan_DM.dbo.[Territory Master SQL Export]
+	where [Level] = 'Hierarchy' and [Time] = 'FY22' and ID != ''
+),
+
+#L2 AS (
+	select ID, [Territory L5] [Theater]
+	from Anaplan_DM.dbo.[Territory Master SQL Export]
+	where [Level] = 'Theater' and [Time] = 'FY22' and ID != ''
+),
+
+#L3 AS (
+	select ID, [Territory L5] [Area]
+	from Anaplan_DM.dbo.[Territory Master SQL Export]
+	where [Level] = 'Area' and [Time] = 'FY22' and ID != ''
+),
+
+#L4 AS (
+	select ID, [Territory L5] [Region]
+	from Anaplan_DM.dbo.[Territory Master SQL Export]
+	where [Level] = 'Region' and [Time] = 'FY22' and ID != ''
+),
+
+#L5 AS (
+	select ID, [Territory L5] [District]
+	from Anaplan_DM.dbo.[Territory Master SQL Export]
+	where [Level] = 'District' and [Time] = 'FY22' and ID != ''
+),
+
+/* Union the Territory IDs */
+#FY19_CFY_Territory as
+(
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, CFY.[Territory L5] [Territory], 
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], [Time] as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Territory' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory], 
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], [Time] as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'District' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory],
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], [Time] as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Region' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory],
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], [Time] as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Area' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory],
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], [Time] as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Theater' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory],
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], [Time] as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Hierarchy' and [Time] = 'FY22'
+
+		Union
+
+		Select Hierarchy, Theater, Area, Region, District, Territory,
+			   Territory_ID [ID], Short_Description, Level, Segment, Type, [Year]
+		from SalesOps_DM.dbo.Territory_Quota_FY19_21
+		where Period ='FY' and Measure = 'M1_Quota'
+		
+		Union
+		----Assume the FY22 Territories are the same in FY23 ----
+				SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, CFY.[Territory L5] [Territory], 
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], 'FY23' as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Territory' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory], 
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], 'FY23' as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'District' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory],
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], 'FY23' as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Region' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory],
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], 'FY23' as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Area' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory],
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], 'FY23' as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Theater' and [Time] = 'FY22'
+
+		UNION
+					
+		SELECT #L1.Hierarchy, #L2.Theater, #L3.Area, #L4.Region, #L5.District, null [Territory], -- CFY.[Territory L5] [Territory],
+				   CFY.ID, CFY.[Territory L5] [Short_Description], CFY.[Level], CFY.[Territory Segment] [Segment], CFY.[Territory Role Type] [Type], 'FY23' as [Year]
+			from Anaplan_DM.dbo.[Territory Master SQL Export] CFY
+			left join #L1 on #L1.ID = left(CFY.ID,2)
+			left join #L2 on #L2.ID = left(CFY.ID,6)
+			left join #L3 on #L3.ID = left(CFY.ID,10)
+			left join #L4 on #L4.ID = left(CFY.ID,14)
+			left join #L5 on #L5.ID = left(CFY.ID,18)
+		where CFY.[ID] != '' and CFY.[Level] = 'Hierarchy' and [Time] = 'FY22'
+		-------------------------
+
+),
+
+/* M1 Quota */
+#M1_Quota as (
+	select ID, [Level], Right(Period_Yr, 4) [Year], Right(Period_Yr, 4) + ' ' + left(Period_Yr,2) [Period], [Quota] [Qtrly_Quota], [Half_Quota], [Annual_Quota]
+	from
+		( 
+		select ID, [Level], [Q1 FY22], [Q2 FY22], [Q1 FY22] + [Q2 FY22] as [Half_Quota], [FY22] [Annual_Quota]
+		from
+			(
+					select ID, [Level], [Time], cast([Position Discrete Quota] as decimal(18,2)) [M1_Quota]
+					from Anaplan_DM.dbo.[Territory Master SQL Export]
+					where [Time] like '%FY22' and [Position Discrete Quota] not like '%[A-za-z$]%'
+					  and ID != ''
+					) as SRC
+					Pivot
+					(sum ([M1_Quota])
+					for
+					[Time] in ([Q1 FY22], [Q2 FY22], [FY22])
+					) as pvt
+			) as SRC2
+			UNPIVOT
+			( [Quota] for [Period_Yr] in ([Q1 FY22], [Q2 FY22])
+			) as unpvt
+			
+	UNION
+
+	select ID, [Level], Right(Period_Yr, 4) [Year], Right(Period_Yr, 4) + ' ' + left(Period_Yr,2) [Period], [Quota] [Qtrly_Quota], [Half_Quota], [Annual_Quota]
+	from
+		( 
+		select ID, [Level], [Q3 FY22], [Q4 FY22], [Q3 FY22] + [Q3 FY22] as [Half_Quota], [FY22] [Annual_Quota]
+		from
+			(
+					select ID, [Level], [Time], cast([Position Discrete Quota] as decimal(18,2)) [M1_Quota]
+					from Anaplan_DM.dbo.[Territory Master SQL Export]
+					where [Time] like '%FY22' and [Position Discrete Quota] not like '%[A-za-z$]%'
+					  and ID != ''
+					) as SRC
+					Pivot
+					(sum ([M1_Quota])
+					for
+					[Time] in ([Q3 FY22], [Q4 FY22], [FY22])
+					) as pvt
+			) as SRC2
+			UNPIVOT
+			( [Quota] for [Period_Yr] in ([Q3 FY22], [Q4 FY22])
+			) as unpvt
+
+		UNION 
+		
+		Select [Territory_ID] [ID], [Level], [Year], [Year] + ' ' + [Period] as [Period], [Quota] [Qtrly_Quota], [Half_Quota], [Annual_Quota] from 
+			(
+			Select [Territory_ID], [Level], [Year], [Q1], [Q2], [Q1]+[Q2] [Half_Quota], [FY] [Annual_Quota] from 
+				(
+				Select Territory_ID, [Level], Year, Period, cast(Quota as decimal(18,2)) Quota
+				from SalesOps_DM.dbo.[Territory_Quota_FY19_21]
+				where Measure = 'M1_Quota' and Period in ('Q1','Q2','FY')
+--				  and Territory_ID = 'WW_AMS_COM_NEA_CPK_001' 
+			    ) SRC
+			    PIVOT
+			    (
+			    sum([Quota]) for [Period] in ([Q1], [Q2], [FY])
+			    ) as pvt
+			) SRC2
+			UNPIVOT
+			( Quota for [Period] in ([Q1],[Q2])
+			) unpvt
+			
+		UNION 
+		
+		Select [Territory_ID] [ID], [Level],  [Year], [Year] + ' ' + [Period] as [Period], [Quota] [Qtrly_Quota], [Half_Quota], [Annual_Quota] from 
+			(
+			Select [Territory_ID], [Level], [Year], [Q3], [Q4], [Q3]+[Q4] [Half_Quota], [FY] [Annual_Quota] from 
+				(
+				Select Territory_ID, [Level], Year, Period, cast(Quota as decimal(18,2)) Quota
+				from SalesOps_DM.dbo.[Territory_Quota_FY19_21]
+				where Measure = 'M1_Quota' and Period in ('Q3','Q4','FY')
+--				  and Territory_ID = 'WW_AMS_COM_NEA_CPK_001' 
+			    ) SRC
+			    PIVOT
+			    (
+			    sum([Quota]) for [Period] in ([Q3], [Q4], [FY])
+			    ) as pvt
+			) SRC2
+			UNPIVOT
+			( Quota for [Period] in ([Q3],[Q4])
+			) unpvt			
+
+		------------ Insert dummpy for FY23 ----------------------------------
+		UNION
+		Select ID, [Level], [Year], [Period], cast(Half_Quota as decimal(18,2)) [Half_Quota], cast(Annual_Quota as decimal(18,2)), cast(Qtrly_Quota as decimal(18,2))  from
+			(
+			Select ID, [Level], [Year], 0 [Half_Quota], 0 [Annual_Quota],
+				   0 [FY23 Q1], 0 [FY23 Q2], 0 [FY23 Q3], 0 [FY23 Q4]
+			from #FY19_CFY_Territory
+			where [Year] = 'FY23' 
+			--and ID = 'WW_AMS_COM_CEN_TEN_001'
+			) as src
+			UNPIVOT
+			( [Qtrly_Quota] for [Period] in ([FY23 Q1], [FY23 Q2], [FY23 Q3], [FY23 Q4])
+			) as unpvt		
+),
+
+#Ter_Master_and_M1_Quota as (
+				SELECT convert(varchar, getdate(), 112) Report_date,
+					   cast(right(#M1_Quota.[Year],2) as int) - cast(right(Today_FD.FiscalYear,2) as int) as [Rel_Year_from_RptDate],
+					   (cast(right(#M1_Quota.[Year],2) as int) * 4 + cast(right(#M1_Quota.[Period],1) as int))
+					    - (cast(right(Today_FD.FiscalYear,2) as int) * 4 + cast(Today_FD.FiscalQuarter as int)) [Rel_Qtr_from_RptDate],
+		
+					   M.Hierarchy, M.Theater, M.Area, M.Region, M.District, M.Territory,
+					   M.ID [Territory_ID], M.[Short_Description], M.[Level], M.[Segment], M.[Type],
+					   #M1_Quota.[Year], #M1_Quota.[Period], #M1_Quota.[Qtrly_Quota], #M1_Quota.[Half_Quota], #M1_Quota.[Annual_Quota],
+					   D.[District_Qtrly_Quota], D.[District_Half_Quota], D.[District_Annual_Quota],
+					   R.[Region_Qtrly_Quota], R.[Region_Half_Quota], R.[Region_Annual_Quota],
+					   A.[Area_Qtrly_Quota], A.[Area_Half_Quota], A.[Area_Annual_Quota],
+					   T.[Theater_Qtrly_Quota], T.[Theater_Half_Quota], T.[Theater_Annual_Quota],
+					   H.[Hierarchy_Qtrly_Quota], H.[Hierarchy_Half_Quota], H.[Hierarchy_Annual_Quota]
+					   
+				from #FY19_CFY_Territory M
+				left join #M1_Quota on #M1_Quota.ID = M.ID and #M1_Quota.[Year] = M.[Year]
+				left join 
+					(select ID, [Year], [Period], Qtrly_Quota District_Qtrly_Quota, Half_Quota District_Half_Quota, Annual_Quota District_Annual_Quota from #M1_Quota where [Level] = 'District') D on D.Id = left(#M1_Quota.Id,18) and D.[Period] = #M1_Quota.[Period] and D.[Year] = #M1_Quota.[Year]
+				left join 
+					(select ID, [Year], [Period], Qtrly_Quota Region_Qtrly_Quota, Half_Quota Region_Half_Quota, Annual_Quota Region_Annual_Quota from #M1_Quota where [Level] = 'Region') R on R.Id = left(#M1_Quota.Id,14) and R.[Period] = #M1_Quota.[Period] and R.[Year] = #M1_Quota.[Year]
+				left join 
+					(select ID, [Year], [Period], Qtrly_Quota Area_Qtrly_Quota, Half_Quota Area_Half_Quota, Annual_Quota Area_Annual_Quota from #M1_Quota where [Level] = 'Area') A on A.Id = left(#M1_Quota.Id,10) and A.[Period] = #M1_Quota.[Period] and A.[Year] = #M1_Quota.[Year]
+				left join 
+					(select ID, [Year], [Period], Qtrly_Quota Theater_Qtrly_Quota, Half_Quota Theater_Half_Quota, Annual_Quota Theater_Annual_Quota from #M1_Quota where [Level] = 'Theater') T on T.Id = left(#M1_Quota.Id,6) and T.[Period] = #M1_Quota.[Period] and T.[Year] = #M1_Quota.[Year]
+				left join 
+					(select ID, [Year], [Period], Qtrly_Quota Hierarchy_Qtrly_Quota, Half_Quota Hierarchy_Half_Quota, Annual_Quota Hierarchy_Annual_Quota from #M1_Quota where [Level] = 'Hierarchy') H on H.Id = left(#M1_Quota.Id,2) and H.[Period] = #M1_Quota.[Period] and H.[Year] = #M1_Quota.[Year]
+				left join NetSuite.dbo.DM_Date_445_With_Past Today_FD on Today_FD.Date_ID = convert(varchar, getdate(), 112)
+)
+
+
+Select *
+from #Ter_Master_and_M1_Quota 
+where Territory_ID = 'WW_AMS_COM_CEN_TEN_001'
+
 
 
 /*****************************************/
@@ -52,85 +380,6 @@ where A.IsDeleted = 'false'
 /*                                       */
 /*****************************************/
 With
-
-/* Geo Quota */
-#Geo_M1_Quota as (
-	select Territory_ID, [Year], [Period], Level, cast(Quota as decimal(18,2)) Quota, District, Region, Theater Geo, Area,
-	case when Period in ('Q1','Q2') then '1H' 
-	     when Period in ('Q3','Q4') then '2H'
-	end [Half_Period]
-	from SalesOps_DM.dbo.Territory_Quota_FY22_ANA
-	where Measure = 'M1_Quota'
-	),
-#Geo_FB_Quota as (
-	select Territory_ID, [Year], [Period], Level, cast(Quota as decimal(18,2)) Quota, District, Region, Theater Geo, Area,
-	case when Period in ('Q1','Q2') then '1H' 
-	     when Period in ('Q3','Q4') then '2H'
-	end [Half_Period]
-	from SalesOps_DM.dbo.Territory_Quota_FY22_ANA
-	where Measure = 'FB_Quota'
-	),
-
-#Geo_Quota as (
-	Select #Geo_M1_Quota.[Year], #Geo_M1_Quota.Period, #Geo_M1_Quota.Half_Period, #Geo_M1_Quota.Geo, #Geo_M1_Quota.Area, #Geo_M1_Quota.Region, #Geo_M1_Quota.District,
-	#Geo_M1_Quota.Level, #Geo_M1_Quota.Territory_ID, #Geo_M1_Quota.Quota [M1_Quota], #Geo_FB_Quota.Quota [FB_Quota]
-	from #Geo_M1_Quota
-	left join #Geo_FB_Quota on #Geo_M1_Quota.Territory_ID = #Geo_FB_Quota.Territory_ID and #Geo_M1_Quota.Period = #Geo_FB_Quota.Period
-),
-
-/* Per Territory, Territory Qtr Quota, + District + Region + Theater Quota */
-#Geo_Quota_Wide as (
-		Select R.Territory_ID, DQ.[Year], DQ.Period, DQ.Geo, DQ.Area, DQ.Region, DQ.District
-					, TQ.Terr_Qtrly_Quota, TQ.Terr_Qtrly_FB_Quota, TH.Terr_Half_Quota, TH.Terr_Half_FB_Quota, TA.Terr_Annual_Quota, TA.Terr_Annual_FB_Quota
-					, DQ.District_Qtrly_Quota, DQ.District_Qtrly_FB_Quota, DH.District_Half_Quota, DH.District_Half_FB_Quota, DA.District_Annual_Quota, DA.District_Annual_FB_Quota
-					, RQ.Region_Qtrly_Quota, RQ.Region_Qtrly_FB_Quota, RH.Region_Half_Quota, RH.Region_Half_FB_Quota, RA.Region_Annual_Quota, RA.Region_Annual_FB_Quota
-					, SRQ.Area_Qtrly_Quota, SRQ.Area_Qtrly_FB_Quota, SRH.Area_Half_Quota, SRH.Area_Half_FB_Quota, SRA.Area_Annual_Quota, SRA.Area_Annual_FB_Quota
-					, GQ.Geo_Qtrly_Quota, GQ.Geo_Qtrly_FB_Quota, GH.Geo_Half_Quota, GH.Geo_Half_FB_Quota, GA.Geo_Annual_Quota, GA.Geo_Annual_FB_Quota
-
-		from (Select distinct(Territory_ID) from SalesOps_DM.dbo.Territory_Quota_FY22_ANA where Level = 'Territory' and Period = 'FY'
-			  UNION
-			  Select distinct(Territory_ID) from SalesOps_DM.dbo.Territory_Quota_FY22 where Level = 'District' and Period = 'FY'
-			 ) R
-
-		left join (Select Territory_ID, [Year], Period, Half_Period, Geo, Area, Region, District,
-					      M1_Quota [District_Qtrly_Quota], FB_Quota [District_Qtrly_FB_Quota] from #Geo_Quota where Level = 'District' and Period in ('Q1','Q2','Q3','Q4'))
-				   DQ on DQ.Territory_ID = substring(R.Territory_ID, 1, 18)
-		left join (Select Territory_ID, Period, M1_Quota [District_Half_Quota], FB_Quota [District_Half_FB_Quota] from #Geo_Quota where Level = 'District' and Period in ('1H','2H'))
-				   DH on DH.Territory_ID = substring(R.Territory_ID, 1, 18) and DH.Period = DQ.Half_Period
-		left join (Select Territory_ID, M1_Quota [District_Annual_Quota], FB_Quota [District_Annual_FB_Quota] from #Geo_Quota where Level = 'District' and Period in ('FY'))
-				   DA on DA.Territory_ID = substring(R.Territory_ID, 1, 18)
-
-   		left join (Select Territory_ID, [Year], Period, Half_Period, Geo, Area, Region, District,
-			      M1_Quota [Terr_Qtrly_Quota], FB_Quota [Terr_Qtrly_FB_Quota] from #Geo_Quota where Level = 'Territory' and Period in ('Q1','Q2','Q3','Q4'))
-				  TQ on TQ.Territory_ID = R.Territory_ID and TQ.Period = DQ.Period
-   		left join (Select Territory_ID, [Year], Period, Half_Period, Geo, Area, Region, District,
-			      M1_Quota [Terr_Half_Quota], FB_Quota [Terr_Half_FB_Quota] from #Geo_Quota where Level = 'Territory' and Period in ('1H', '2H'))
-				  TH on TH.Territory_ID = R.Territory_ID and TH.Period = DQ.Half_Period
-   		left join (Select Territory_ID, [Year], Period, Half_Period, Geo, Area, Region, District,
-			      M1_Quota [Terr_Annual_Quota], FB_Quota [Terr_Annual_FB_Quota] from #Geo_Quota where Level = 'Territory' and Period in ('FY'))
-				  TA on TA.Territory_ID = R.Territory_ID
-
-		left join (Select Territory_ID, Period, M1_Quota [Region_Qtrly_Quota], FB_Quota [Region_Qtrly_FB_Quota] from #Geo_Quota where Level = 'Region' and Period in ('Q1','Q2','Q3','Q4'))
-				   RQ on RQ.Territory_ID = left(R.Territory_ID, 14) and RQ.Period = DQ.Period
-		left join (Select Territory_ID, Period, M1_Quota [Region_Half_Quota], FB_Quota [Region_Half_FB_Quota] from #Geo_Quota where Level = 'Region' and Period in ('1H','2H'))
-				   RH on RH.Territory_ID = left(R.Territory_ID, 14) and RH.Period = DQ.Half_Period
-		left join (Select Territory_ID, Period, M1_Quota [Region_Annual_Quota], FB_Quota [Region_Annual_FB_Quota] from #Geo_Quota where Level = 'Region' and Period in ('FY'))
-				   RA on RA.Territory_ID = left(R.Territory_ID, 14)
-
-		left join (Select Territory_ID, Period, M1_Quota [Area_Qtrly_Quota], FB_Quota [Area_Qtrly_FB_Quota] from #Geo_Quota where Level = 'Area' and Period in ('Q1','Q2','Q3','Q4'))
-				   SRQ on SRQ.Territory_ID = left(R.Territory_ID, 10) and SRQ.Period = DQ.Period
-		left join (Select Territory_ID, Period, M1_Quota [Area_Half_Quota], FB_Quota [Area_Half_FB_Quota] from #Geo_Quota where Level = 'Area' and Period in ('1H','2H'))
-				   SRH on SRH.Territory_ID = left(R.Territory_ID, 10) and SRH.Period = DQ.Half_Period
-		left join (Select Territory_ID, Period, M1_Quota [Area_Annual_Quota], FB_Quota [Area_Annual_FB_Quota] from #Geo_Quota where Level = 'Area' and Period in ('FY'))
-				   SRA on SRA.Territory_ID = left(R.Territory_ID, 10)
-
-		left join (Select Territory_ID, Period, M1_Quota [Geo_Qtrly_Quota], FB_Quota [Geo_Qtrly_FB_Quota] from #Geo_Quota where Level = 'Theater' and Period in ('Q1','Q2','Q3','Q4'))
-				   GQ on GQ.Territory_ID = left(R.Territory_ID, 6) and GQ.Period = DQ.Period
-		left join (Select Territory_ID, Period, M1_Quota [Geo_Half_Quota], FB_Quota [Geo_Half_FB_Quota] from #Geo_Quota where Level = 'Theater' and Period in ('1H','2H')) --WW_EMA_ENC
-				   GH on GH.Territory_ID = left(R.Territory_ID, 6) and GH.Period = DQ.Half_Period
-		left join (Select Territory_ID, Period, M1_Quota [Geo_Annual_Quota], FB_Quota [Geo_Annual_FB_Quota] from #Geo_Quota where Level = 'Theater' and Period in ('FY'))
-				   GA on GA.Territory_ID = left(R.Territory_ID, 6)
-),
 
 #Oppt_Split as (
 			/* a copy of the original deals */
@@ -147,7 +396,7 @@ With
 				, OpptSplit.SplitPercentage
 				, OpptSplit.CurrencyIsoCode Currency
 				, OpptSplit.SplitAmount Amount  -- Split amount is counted towards raw bookings for comp calculation
-
+--- need to pull commisonable amount
 				, RecType.Name RecordType
 				
 			from PureDW_SFDC_Staging.dbo.Opportunity Oppt
@@ -163,99 +412,35 @@ With
 			and OpptSplit.IsDeleted = 'False'
 )
 
-
-	/* Add Quota and RelDate inforamtion */
-	Select Oppt.*
-	
-		/* append the Quota of the Opportunity (split) Territory & Close Date */
-	
-		, Q.Terr_Qtrly_Quota
-		, Q.Terr_Half_Quota
-		, Q.Terr_Annual_Quota
-	
-		--, Q.District
-		, Q.District_Qtrly_Quota
-		, Q.District_Half_Quota
-		, Q.District_Annual_Quota
-	
-		--, Q.Region
-		, Q.Region_Qtrly_Quota
-		, Q.Region_Half_Quota
-		, Q.Region_Annual_Quota
-
-		--, Q.Area
-		, Q.Area_Qtrly_Quota
-		, Q.Area_Half_Quota
-		, Q.Area_Annual_Quota
-	
-		--, Q.Geo Theater
-		, Q.Geo_Qtrly_Quota Theater_Qtrly_Quota
-		, Q.Geo_Half_Quota Theater_Half_Quota
-		, Q.Geo_Annual_Quota Theater_Annual_Quota
-
-
-		/* calculate the relative period */
-		, case when datediff(quarter, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Close Month]) = 0 then 'This quarter'
-			   when datediff(quarter, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Close Month]) < 0 then 'Last ' + cast(datediff(quarter, [Fiscal Close Month], DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1)) as varchar(2)) + ' quarter'
-			   when datediff(quarter, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Close Month]) > 0 then 'Next ' + cast(datediff(quarter, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Close Month]) as varchar(2)) + ' quarter'
-		  end as [Relative_closeqtr]
-	  
-		, case when datediff(year, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Close Month]) = 0 then 'This year'
-			when datediff(year, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Close Month]) < 0 then 'Last ' + cast(datediff(year, [Fiscal Close Month], DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1)) as varchar(2)) + ' year'
-			when datediff(year, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Close Month]) > 0 then 'Next ' + cast(datediff(year, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Close Month]) as varchar(2)) + ' year'
-	  	end as [Relative_closeyear]
-
-		/* calculate the relative period */
-		, case when datediff(quarter, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Create Month]) = 0 then 'This quarter'
-			when datediff(quarter, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Create Month]) < 0 then 'Last ' + cast(datediff(quarter, [Fiscal Create Month], DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1)) as varchar(2)) + ' quarter'
-			when datediff(quarter, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Create Month]) > 0 then 'Next ' + cast(datediff(quarter, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Create Month]) as varchar(2)) + ' quarter'
-		  end as [Relative_createqtr]
-	  
-		, case when datediff(year, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Create Month]) = 0 then 'This year'
-				when datediff(year, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Create Month]) < 0 then 'Last ' + cast(datediff(year, [Fiscal Create Month], DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1)) as varchar(2)) + ' year'
-				when datediff(year, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Create Month]) > 0 then 'Next ' + cast(datediff(year, DateFromParts(TodayDate_445.FiscalYear,TodayDate_445.FiscalMonth,1), [Fiscal Create Month]) as varchar(2)) + ' year'
-		  end as [Relative_createyear]
-	
-	from (
-			/* add the opportunity data to the split opportunity row */
+		
+/* add the opportunity data to the split opportunity row */
 			SELECT	
 					Oppt.Id [Oppt Id], Oppt.Name [Opportunity]
+					, A.Id [Oppt_Account_Id], A.Name [Oppt_Acct], UL_P.Name [Global Ultimate Parent Account], UL_P.Id [Global Ultimate Parent Acct_ID]
 					, Split.Acct_Exec
 					, Split.SE_Oppt_Owner_SFDC_UserID
 					, Oppt.StageName [Stage]
 					, Split.Split_Territory_ID
 
 					, case
-						when cast(substring(Oppt.StageName, 7, 1) as int) <= 3 then 'Early Stage'
-						when cast(substring(Oppt.StageName, 7, 1) as int) <= 5 then 'Adv. Stage'
-						when cast(substring(Oppt.StageName, 7, 1) as int) <= 7 then 'Commit'
+						when cast(substring(Oppt.StageName, 7, 1) as int) <= 7 then 'Open'
  						when Oppt.StageName in ('Stage 8 - Closed/Won','Stage 8 - Credit') then 'Won'
 						when Oppt.StageName in ('Stage 8 - Closed/ Disqualified','Stage 8 - Closed/Lost','Stage 8 - Closed/No Decision','Stage 8 - Closed/ Low Capacity') then 'Loss'
-					end as StageGroup
-							
+					end as Oppt_Stage
+					
+					, case
+						when cast(substring(Oppt.StageName, 7, 1) as int) <= 2 then '0-2 Qualify'
+						when cast(substring(Oppt.StageName, 7, 1) as int) <= 5 then '3-5 Assess'
+						when cast(substring(Oppt.StageName, 7, 1) as int) <= 7 then '6-7 Commit'
+ 						when Oppt.StageName in ('Stage 8 - Closed/Won','Stage 8 - Credit') then '8 Won'
+						when Oppt.StageName in ('Stage 8 - Closed/ Disqualified','Stage 8 - Closed/Lost','Stage 8 - Closed/No Decision','Stage 8 - Closed/ Low Capacity') then '8 Loss'
+					end as Stage_grp2
+					
 					, case when cast(substring(Oppt.StageName, 7, 1) as int) <= 7 
 					  then case when Oppt.Converted_Amount_USD__c is null then 0 else cast(Oppt.Converted_Amount_USD__c * Split.SplitPercentage / 100 as decimal(15,2)) end
 					  else 0 
 					  end as [Open$]
-			
-					, case 
-						when cast(substring(Oppt.StageName, 7, 1) as int) < 4
-						then case when Oppt.Converted_Amount_USD__c is null then 0 else cast(Oppt.Converted_Amount_USD__c * Split.SplitPercentage / 100 as decimal(15,2)) end
-						else 0
-					end as [Early Stage$]
-					
-					, case 
-						when cast(substring(Oppt.StageName, 7, 1) as int) >= 4 and cast(substring(Oppt.StageName, 7, 1) as int) <= 5
-						then case when Oppt.Converted_Amount_USD__c is null then 0 else cast(Oppt.Converted_Amount_USD__c * Split.SplitPercentage / 100 as decimal(15,2)) end
-						else 0
-					end as [Adv. Stage$]
 						
-					,case 
-						when cast(substring(Oppt.StageName, 7, 1) as int) >= 6 and cast(substring(Oppt.StageName, 7, 1) as int) <= 7
-						then case when Oppt.Converted_Amount_USD__c is null then 0 else cast(Oppt.Converted_Amount_USD__c * Split.SplitPercentage / 100 as decimal(15,2)) end
-						else 0
-					end as [Commit$]
-			
 					,case 
 						when Oppt.StageName in ('Stage 8 - Closed/Won','Stage 8 - Credit')
 						then case when Oppt.Converted_Amount_USD__c is null then 0 else cast(Oppt.Converted_Amount_USD__c * Split.SplitPercentage / 100 as decimal(15,2)) end
@@ -279,7 +464,26 @@ With
 										 'Stage 8 - Closed/ Low Capacity')
 					  then 1 else 0
 					  end as [Loss_Count]
+					  
+					, Oppt.Stage_Prior_to_Close__c
+					, datediff(day, Oppt.CreatedDate, Oppt.CloseDate) [# of days to closed]
+					, case when Oppt.StageName in ('Stage 8 - Closed/Won','Stage 8 - Credit') then datediff(day, Oppt.CreatedDate, Oppt.CloseDate) else null end [# of days to closed won]
+					, case when Oppt.StageName in ('Stage 8 - Closed/ Disqualified',
+											 'Stage 8 - Closed/Lost',
+											 'Stage 8 - Closed/No Decision', 
+											 'Stage 8 - Closed/ Low Capacity') then datediff(day, Oppt.CreatedDate, Oppt.CloseDate) else null end [# of days to closed loss]
 					
+					
+					, case when datediff(day, Oppt.CreatedDate, Oppt.CloseDate) < 0 then 'Closed b4 Create'
+						 when datediff(day, Oppt.CreatedDate, Oppt.CloseDate) = 0 then 'Same day closed'
+						 when datediff(day, Oppt.CreatedDate, Oppt.CloseDate) <= 90 then '1 qtr'
+						 when datediff(day, Oppt.CreatedDate, Oppt.CloseDate) <= 180 then '2 qtr'
+						 when datediff(day, Oppt.CreatedDate, Oppt.CloseDate) <= 270 then '3 qtr'
+						 when datediff(day, Oppt.CreatedDate, Oppt.CloseDate) <= 365 then '4 qtr'
+						 else 'Over a year'
+					end [# of qtr to closed]
+					
+					, Oppt.Times_Pushed_Out_of_Quarter__c
 					, Split.SplitPercentage
 					, Split.Currency
 					, Split.Amount
@@ -288,12 +492,20 @@ With
 					, cast(Oppt.Converted_Amount_USD__c * Split.SplitPercentage / 100 as decimal(15,2)) Amount_in_USD
 					, cast(Oppt.Total_FlashArray_Amount__c * Split.SplitPercentage / 100 as decimal(15,2)) Total_FlashArray_Amount
 					, cast(Oppt.Total_FlashBlade_Amount__c * Split.SplitPercentage / 100 as decimal(15,2)) Total_FlashBlade_Amount
-					, cast(Oppt.Total_C_Amount__c * Split.SplitPercentage / 100 as decimal(15,2)) Total_C_Amount
-					, cast(Oppt.Total_X_Amount__c * Split.SplitPercentage / 100 as decimal(15,2)) Total_X_Amount
 					, cast(Oppt.Total_Professional_Services_Amount__c * Split.SplitPercentage / 100 as decimal(15,2)) Total_Professional_Services_Amount
+					, cast(Oppt.Total_Training_Amount__c * Split.SplitPercentage / 100 as decimal(15,2)) Total_Training_Amount
+					, cast(Oppt.Total_Credit_Amount__c * Split.SplitPercentage / 100 as decimal(15,2)) Total_Credit_Amount
 					, cast(Oppt.Total_Brocade_Amount__c * Split.SplitPercentage / 100 as decimal(15,2)) Total_Brocade_Amount
 					, cast(Oppt.Total_Cisco_MDS_Amount__c * Split.SplitPercentage / 100 as decimal(15,2)) Total_Cisco_MDS_Amount
 					, cast(Oppt.Total_Cohesity_Amount__c * Split.SplitPercentage / 100 as decimal(15,2)) Total_Cohesity_Amount					
+
+					, cast((Oppt.Converted_Amount_USD__c - Oppt.Total_FlashArray_Amount__c - Oppt.Total_FlashBlade_Amount__c -
+						    Oppt.Total_Professional_Services_Amount__c - Oppt.Total_Training_Amount__c - Oppt.Total_Credit_Amount__c -
+						    Oppt.Total_Brocade_Amount__c - Oppt.Total_Cisco_MDS_Amount__c - Oppt.Total_Cohesity_Amount__c)
+						    * Split.SplitPercentage / 100 as decimal(15,2)) Total_Misc_Amount
+					
+					, cast(Oppt.Total_C_Amount__c * Split.SplitPercentage / 100 as decimal(15,2)) Total_C_Amount
+					, cast(Oppt.Total_X_Amount__c * Split.SplitPercentage / 100 as decimal(15,2)) Total_X_Amount
 					
 					, Oppt.[Type]
 					, Oppt.Transaction_Type__c Transaction_Type
@@ -303,14 +515,19 @@ With
 					, Oppt.Product_Type__c
 					, Case when Oppt.Manufacturer__c = 'Pure Storage' then Oppt.Product_Type__c else Oppt.Manufacturer__c end Product
 
+					, Oppt.Technical_Win_State__c
 					, cast(Oppt.CreatedDate as Date) CreatedDate
 					, DateFromParts(cast(CreateDate_445.FiscalYear as int), cast(CreateDate_445.FiscalMonth as int), 1) [Fiscal Create Month]
 					
 					, cast(Oppt.CloseDate as Date) [Close Date]
 					, [Fiscal Close Month] = DateFromParts(cast(CloseDate_445.FiscalYear as int), cast(CloseDate_445.FiscalMonth as int), 1)
-					, [Fiscal Close Quarter] = left(Oppt.Close_Fiscal_Quarter__c, 2) 
-					, [Fiscal Close Year] = 'FY' + right(Oppt.Close_Fiscal_Quarter__c, 2) 
-					, [Close Semi Year] = case when cast(CloseDate_445.FiscalMonth as int) <= 6 then  '1H' else '2H' end
+					, [Fiscal Close Quarter] = 'FY' + right(CloseDate_445.FiscalYear,2)  + ' ' + CloseDate_445.FiscalQuarterName
+					, [Fiscal Close Year] = 'FY' + right(CloseDate_445.FiscalYear,2)
+					
+					, P.Name [Partner]
+					, P_AE.Id [Partner_AE_Id], P_AE.Name [Partner_AE]
+					, P_SE.Id [Partner_SE_Id], P_SE.Name [Partner_SE]
+					, Oppt.Partner_SE_Engagement_Level__c [Partner SE Engagement]
 														 ----
 					, [TodayKey] = convert(varchar, getDate(), 112)					
 
@@ -318,9 +535,8 @@ With
 			left join PureDW_SFDC_Staging.dbo.[Opportunity] Oppt on Oppt.Id = Split.Id
 			left join NetSuite.dbo.DM_Date_445_With_Past CloseDate_445 on CloseDate_445.Date_ID = convert(varchar, Oppt.CloseDate, 112)
 			left join NetSuite.dbo.DM_Date_445_With_Past CreateDate_445 on CreateDate_445.Date_ID = convert(varchar, Oppt.CreatedDate, 112)
-
-			
-	) Oppt
-	left join #Geo_Quota_Wide Q on Q.Period = Oppt.[Fiscal Close Quarter] and Q.[Year] = Oppt.[Fiscal Close Year] and Q.Territory_ID = Oppt.Split_Territory_Id
-	left join NetSuite.dbo.DM_Date_445_With_Past TodayDate_445 on TodayDate_445.Date_ID = convert(varchar, getDate(), 112)
-
+			LEFT JOIN PureDW_SFDC_Staging.dbo.[Account] P ON P.Id = Oppt.Partner_Account__c
+			left join PureDW_SFDC_staging.dbo.[Contact] P_AE on P_AE.Id = cast(Oppt.Partner_AE_ID__c as varchar)
+			left join PureDW_SFDC_staging.dbo.[Contact] P_SE on P_SE.Id = cast(Oppt.Partner_SE_ID__c as varchar)
+			left join PureDW_SFDC_staging.dbo.[Account] A on A.Id = Oppt.AccountId
+			left join PureDW_SFDC_staging.dbo.[Account] UL_P on left(UL_P.Id, 15) = cast(A.Ultimate_Parent_Id__c as varchar) COLLATE SQL_Latin1_General_CP1_CS_AS
